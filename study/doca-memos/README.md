@@ -54,15 +54,14 @@ NVIDIA DGX SuperPOD가 대표 사례이고 랙 여러 개 규모다. 발표의 �
 CMX가 굳이 pod 레벨인 이유가 여기 있다. node-level은 공유가 안 되고, datacenter-level은 너무 멀다.
 *"GPU 메모리의 연장선"* 이라는 표현도 이 거리감에서 나온다 — 패브릭 하나만 건너면 닿는다.
 
-### 인터커넥트 계층 — scale-up / scale-out / scale-across
+### 인터커넥트 계층 — scale-up / scale-out
 
-위 표가 *범위*라면, 이건 그 범위를 **무엇이 물리적으로 이어주는가**다. NVIDIA는 3단계로 부른다.
+위 표가 *범위*라면, 이건 그 범위를 **무엇이 물리적으로 이어주는가**다. NVIDIA는 scale-up / scale-out으로 구분한다.
 
 | 범위 | NVIDIA 용어 | 연결 수단 | 통신 방식 |
 |---|---|---|---|
 | 노드(~랙) 안 | **scale-up** | **NVLink + NVSwitch** | 메모리 시맨틱 — load/store |
 | pod 안 | **scale-out** | **InfiniBand(Quantum-X)** 또는 **Spectrum-X 이더넷** | 메시지/RDMA 시맨틱 |
-| 데이터센터 간 | **scale-across** | **Spectrum-XGS 이더넷** | 동일 (거리만 확장) |
 
 **노드 안 — NVLink / NVSwitch**
 - **NVLink** = GPU와 GPU를 잇는 링크 자체
@@ -150,7 +149,7 @@ NVLink는 GPU당 양방향 1.8TB/s 수준인 반면 800Gb/s NIC은 100GB/s다. �
 | 정식 명칭 | Context Memory eXtension |
 | 공개 경로 | CES 2026 개념 발표 → GTC 2026 실물 박스 + 데모 |
 | 위치 | [팟(pod)](#pod-팟) 레벨 공유. GPU 메모리의 연장선으로 취급 |
-| 구성 | BlueField-4 스토리지 프로세서(Vera CPU 내장) + NVMe SSD 액침냉각 JBOF + [Spectrum-X 이더넷(RoCE)](#인터커넥트-계층--scale-up--scale-out--scale-across) |
+| 구성 | BlueField-4 스토리지 프로세서(Vera CPU 내장) + NVMe SSD 액침냉각 JBOF + [Spectrum-X 이더넷(RoCE)](#인터커넥트-계층--scale-up--scale-out) |
 | 규모 | 박스 하나당 **약 18페타바이트** (발표에서 명시) |
 | 주장 성능 | 일반 스토리지 대비 **[TPS](#tps-tokens-per-second) 5배, 전력 효율 5배** |
 | 파트너 | NVIDIA 설계 → 스토리지 파트너가 제조·납품. Solidigm(D7-PS1010 Gen5 TLC / D5-P5336 QLC 122TB), ScaleFlux 등이 대응 발표 |
