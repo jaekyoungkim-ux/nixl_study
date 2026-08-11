@@ -1,0 +1,2489 @@
+Transcript Powered by AI
+
+Accelerate AI Inference Using DOCA for Storage
+
+
+00:05
+So for those who are just
+joined, so happy to see you here.
+
+00:10
+I hope you are having a great GTC.
+
+00:12
+Hope you had a chance to go
+to the show floor and see
+
+00:14
+some of the technologies.
+
+00:15
+We are at the third session out of
+four sessions we are having today.
+
+00:19
+So this is the Docker Developer
+Day, the first ever Docker
+
+00:22
+Developer Day, and we are
+all very excited about that.
+
+00:25
+So thank you, thank
+you for being here.
+
+00:29
+So focusing on storage.
+
+00:31
+And if you'd be interested in
+what we talked before in the
+
+00:33
+previous two sessions, it's also be
+later on on the NVIDIA On Demand.
+
+00:37
+So you can always go there
+and including the PDF with
+
+00:40
+all the slides, right?
+
+00:41
+So feel free to take photos,
+yet you're gonna have all the
+
+00:45
+PDF with all the slides later on.
+
+00:48
+So, you know,
+welcome to 2026, right?
+
+00:51
+The agentic era, right?
+
+00:53
+Everyone are talking about
+the agentic era, and I would
+
+00:57
+say this is the session to
+talk about what we need in order
+
+01:01
+to support the agentic era, right?
+
+01:04
+We are moving from the simple
+chatbots, the large brain, to
+
+01:10
+New AI workflows, AI agents that
+have multi-step workflows, they
+
+01:15
+have long conversation, eventually
+they need much more memory, right?
+
+01:19
+It's like a worker, right?
+
+01:20
+You have worker, maybe multiple
+workers, and now they act, right?
+
+01:25
+They act, they need
+to remember, right?
+
+01:26
+It will be kind of
+upsetting if you...
+
+01:29
+Taught a lot of
+things to your worker.
+
+01:31
+The worker reviewed a lot of
+manuals, and then you come
+
+01:36
+the next day, and suddenly the
+worker forgot all of that, right?
+
+01:39
+So with the chatbot,
+it was okay, right?
+
+01:40
+You ask some questions, and you go
+back after a few hours or a days,
+
+01:43
+and maybe it starts a bit over.
+
+01:46
+In this case, you expect
+everything to be.
+
+01:49
+In their memory, right? They
+need to remember everything.
+
+01:52
+And this causes an explosion
+of tokens, right?
+
+01:56
+The token volume and the context
+length is kind of exploding.
+
+02:02
+We have the need for a
+new kind of way to do
+
+02:07
+that infrastructure because
+the existing infrastructure,
+
+02:09
+the way it was built and designed,
+was not designed for this.
+
+02:13
+It's stressed a lot.
+
+02:15
+Now, think about
+the KV cache, right?
+
+02:17
+The KV cache that holds that
+context of everything that
+
+02:21
+the AR worker or multiple
+AR workers learned over time.
+
+02:25
+And we're talking now,
+you've seen yesterday
+
+02:27
+at the keynote, right, 100K.
+
+02:30
+KV cache size, right, 100K
+tokens, right, 400K.
+
+02:34
+This translates to 50 gigabyte
+of memory, 200 gigabyte of memory
+
+02:39
+for just one KV context, right?
+
+02:43
+So think about multiple workers
+that are joining your workforce
+
+02:47
+and you want them to do multi-step,
+so you told them a lot of
+
+02:51
+parts and then at some point
+you're asking to act on something
+
+02:54
+that was like 10 steps.
+
+02:57
+Before, and this is not available,
+this knowledge is not available
+
+03:01
+because where do you store
+all of those vast amount of data?
+
+03:05
+And if you have multiple agents,
+they need to share the data, right?
+
+03:08
+They need to share the
+knowledge, right?
+
+03:10
+You want all your workers, right?
+
+03:11
+Even in your existing teams,
+everyone know the basics, right?
+
+03:14
+If you're in the demo that
+we're showing, right?
+
+03:17
+That's a tax code.
+
+03:19
+If all your guys in the accounting
+team, they know the tax code.
+
+03:23
+This is something that
+
+03:25
+If you learn something new,
+you want to share it, right?
+
+03:28
+So if a worker is working on
+something new, they want to be
+
+03:30
+able to share it with the others.
+
+03:31
+So this is all about moving
+now those 50 gigabyte or 200
+
+03:36
+gigabyte of data in the cloud.
+
+03:39
+How do you do that, right?
+
+03:41
+So AI systems become agentic,
+inference context itself
+
+03:45
+becomes the bottleneck.
+
+03:46
+And this is what we're talking
+about in this session because
+
+03:50
+You know, it's not
+traditional data, right?
+
+03:53
+We are forced to treat it like one
+with the existing infrastructure.
+
+03:57
+So we need something new.
+
+03:58
+And if you look on this way, the
+system is being designed, right?
+
+04:02
+So you have the local HBM, which is
+the fastest, lowest latency memory,
+
+04:06
+very expensive one for the GPU.
+
+04:09
+For the inference context,
+which is large, immutable, and
+
+04:12
+recomputable, you can't, sometimes
+it will spill over, right?
+
+04:16
+It will spill over, and then
+in that case, you're moving
+
+04:18
+from the different layers.
+
+04:19
+So we kind of numbered them, right?
+
+04:22
+G1 is that layer, and then
+you can go to G2, which is
+
+04:24
+the system memory, right?
+
+04:26
+The CPU memories, and you've
+noticed from keynote to keynote,
+
+04:29
+we're talking about stronger CPUs
+that have more memory, yet it's...
+
+04:34
+Not enough in many of the
+cases, right, because you
+
+04:37
+have multiple workers and multiple
+long conversations and flows
+
+04:41
+to act upon, and the KV context
+just increases and increases.
+
+04:44
+Now, you can go to the local
+storage, but the local storage
+
+04:47
+is local, it's slower, and
+it cannot be shared, so it's
+
+04:52
+not a solution that is very common.
+
+04:54
+And then you can use network
+storage, which is shared.
+
+04:57
+This is the G4, right?
+
+04:58
+So G4 is an option, but it's...
+
+05:03
+Further away from
+the compute, right?
+
+05:05
+It's further away from the compute.
+
+05:07
+And think about G4, right?
+
+05:08
+We talked in the previous
+sessions about the five layer
+
+05:10
+cake and cooking.
+
+05:11
+So we are baking a lot of
+goodness here with DOCA.
+
+05:14
+And think about the case in which
+you're cooking a 10 course meal and
+
+05:19
+you have all the ingredients on the
+table and you're starting to cook.
+
+05:23
+And at some point, you run
+out of something.
+
+05:25
+You don't have salt, for example.
+
+05:27
+So going to the G4 is kind
+of equivalent to just driving
+
+05:30
+to the nearby supermarket
+to bring that salt.
+
+05:34
+Probably, it would have been better
+to just start all over again.
+
+05:37
+And this is what
+happens in the AI era.
+
+05:40
+The GPUs are doing a
+lot of recompute.
+
+05:42
+But recompute has an effect on
+power efficiency, eventually, once
+
+05:47
+the GPUs are stronger and they can
+
+05:49
+Manage more data.
+
+05:51
+Once the storage becomes the
+bottleneck, then you have
+
+05:53
+GPUs which are idle.
+
+05:55
+And this is where we have
+this new storage here.
+
+05:57
+So we kind of came up with
+a new storage here.
+
+06:00
+This is the CMX. This is the
+G 3.5, a new storage tier
+
+06:06
+for KV cache and context.
+
+06:09
+This was introduced at CES,
+and from CES as something
+
+06:13
+that we've just shared as an idea,
+now to this GTC in which we have
+
+06:17
+those boxes on the show floor and
+a demo, and we are also introducing
+
+06:22
+the software around this.
+
+06:23
+So CMX is an AI native.
+
+06:27
+Context storage tier.
+
+06:29
+It's shared across the GPUs
+at the pod level, so it sits
+
+06:33
+near the compute.
+
+06:34
+It eventually, think about it as
+an extension of the GPU memory.
+
+06:38
+We extend the GPU memory, and
+we are using a co-optimized
+
+06:43
+solution in which we take
+all over the different components,
+
+06:45
+the NVIDIA BlueField-4, the
+Spectrum X Ethernet, that
+
+06:49
+Thrive's DI, DI Fabric, Dynamo.
+
+06:52
+We take all of that, we optimize
+it end-to-end in order to develop,
+
+06:56
+to deliver a solution which is
+
+06:59
+The best possible for KV Context.
+
+07:02
+And we are working with the
+top leaders, right?
+
+07:04
+We're working with
+the best partners.
+
+07:06
+We are eventually always about
+enabling the developers.
+
+07:10
+This event is all about that.
+
+07:12
+And we are working with these guys.
+
+07:13
+You can see the names in order
+to build this solution, which
+
+07:16
+is designed by NVIDIA and
+eventually created and delivered
+
+07:21
+by the storage partners.
+
+07:25
+In the first session, in the
+introduction, I talked about
+
+07:27
+everything we've done with
+DOCA over the years.
+
+07:29
+DOCA 3.0 is our current generation.
+
+07:33
+And we've baked a lot of, yeah,
+we're all about cooking, right?
+
+07:36
+So we've baked a lot
+of value into DOCA.
+
+07:39
+We've, one of the, I think it's
+one of my favorites, right?
+
+07:42
+It's Snap. Snap technology in
+general is the idea in which
+
+07:45
+you emulate a drive to the host.
+
+07:48
+But that drive is not a real
+drive, it's an emulated drive,
+
+07:51
+and you orchestrate the data
+movement on the Bluefield DPU.
+
+07:55
+And over the years, we've built
+all of those layers, so we start
+
+07:58
+from the very basic, the foundation
+of everything, which enables
+
+08:01
+all the hardware acceleration that
+we have in our DPUs, the Bluefield
+
+08:08
+DPUs, and the ConnectX SuperNICs,
+Including encryption at wire
+
+08:12
+speed, integrity checks, RDMA of
+course, NVMe over fabric and more.
+
+08:18
+We build those layers, so
+we have the drivers, we have
+
+08:21
+libraries such as DOCA DMA
+and DOCA STA for storage target
+
+08:26
+acceleration, and of course,
+DOCA RDMA in order to enable
+
+08:29
+that, and once we kind of take it
+all into a single solution, this is
+
+08:34
+where we deliver the microservices,
+these are the DOCA microservices.
+
+08:37
+Which enable a disaggregated,
+virtualized solution at scale,
+
+08:41
+which is all hardware accelerated.
+
+08:43
+And Snap is a great example of
+that, because think about this.
+
+08:46
+Once you expose a drive to
+the host and it's emulated,
+
+08:50
+you can actually quickly switch
+that, because you control the
+
+08:54
+orchestrated data on the DPU side.
+
+08:55
+So many of the cloud
+providers are using this
+
+08:58
+exact technology in order
+to boot different tenants, right?
+
+09:01
+So in order to just switch.
+
+09:03
+Between tenants, you just
+need to orchestrate data to
+
+09:05
+another place, but from the
+whole site, you just see a drive.
+
+09:07
+So that drive is updated with the
+latest data of the relevant tenant.
+
+09:14
+And this is the technology.
+
+09:15
+This is the foundation for
+what I'm going to introduce.
+
+09:19
+OK, so first time,
+right, first time.
+
+09:23
+We kind of released that, so you
+will find it on the web as well.
+
+09:26
+I'm happy here to kind of
+honor to be with you guys
+
+09:29
+and introduce DocaMemos.
+
+09:30
+DocaMemos is our new framework
+for the agentic era.
+
+09:34
+And it's, I would say, even a bit
+different than what we've done up
+
+09:38
+to now, because this is all about
+
+09:41
+KV cache acceleration and
+sharing at part scale, right?
+
+09:45
+This is a DOCA 4.0 new SDK which
+runs on both sides of the solution.
+
+09:51
+It runs from the compute side
+to the storage, and all the
+
+09:55
+KV context is visible, right,
+to the AI workloads, and all
+
+10:00
+the KV context is pushed to
+the storage, so it's...
+
+10:03
+Something different than what
+we usually build on those
+
+10:07
+DPUs that orchestrate all
+of the data movement and eventually
+
+10:10
+shift it to their way.
+
+10:11
+In this case, actually, all of the
+knowledge, all of the context and
+
+10:15
+some hints and tips are eventually
+pushed to the storage node
+
+10:18
+because it's critical, it's shared
+across the compute, and we'll
+
+10:21
+share more about that technology.
+
+10:23
+And if you look on, I would say,
+
+10:27
+libraries, the layers, right?
+
+10:29
+And you see, we start from
+the compute side with Dynamo.
+
+10:32
+Dynamo is doing the
+KV routing, right?
+
+10:35
+You know, it kind of has the
+visibility and awareness to
+
+10:37
+where the KV cache are being
+stored over the network.
+
+10:40
+And from Dynamo layer, we
+go down to the Nixle, which
+
+10:42
+is the transport layer.
+
+10:43
+And then we have, you
+can see DOCA in...
+
+10:46
+Three different places.
+
+10:48
+So on the compute side, you
+have DOCA on the host.
+
+10:51
+This is what's
+exposed to the workload.
+
+10:53
+We expose an emulated key value
+API, which is context aware API.
+
+11:00
+And then on the DPU side,
+we have DOCA memos, which
+
+11:05
+orchestrate all of the KV cache
+context, all the data movement,
+
+11:08
+and adds all the different,
+I would say, characteristics, such
+
+11:12
+as the configuration of encryption.
+
+11:14
+It is all done in an isolated
+environment, so you don't
+
+11:17
+need to run it on the host.
+
+11:18
+You don't take any...
+
+11:20
+Compute, you don't invest
+any compute in that.
+
+11:22
+You add the isolation layer,
+security, integrity, and this is
+
+11:28
+the cache, the KV cache mapping and
+isolation part once it goes down.
+
+11:34
+Now, on the Bluefield
+side, you can see...
+
+11:39
+The DPU, you can see the
+different engines.
+
+11:41
+Now, these acceleration engines
+are shared across the DPU,
+
+11:44
+the data processing unit,
+and the storage processor.
+
+11:48
+And this is eventually what
+brings the value, right?
+
+11:50
+We accelerate all the
+different pieces.
+
+11:52
+And now the fabric, which
+is a Spectrum X fabric, is
+
+11:56
+optimizing the way we kind
+of transition those KV cache
+
+12:00
+from the compute to the storage.
+
+12:02
+And then on the storage side,
+think about it, there is
+
+12:05
+An entity that gets all that data
+from the different nodes and place
+
+12:12
+it, right, in a very smart way.
+
+12:14
+And we're going to have a
+lot of data about this.
+
+12:19
+And we share it. I mean, it's
+all about the data, right?
+
+12:21
+And I'm honored to invite
+Oren Duer, who's kind of the
+
+12:24
+leading architect, working
+with the entire team to build
+
+12:27
+this very fascinating solution.
+
+12:29
+Thank you. Thank you, Ariel.
+
+12:34
+First of all, it's impossible to
+see any of you, just so you know.
+
+12:40
+Okay, so DOCA memos.
+
+12:43
+I hope that by now, since CES,
+that CMX was introduced, and until
+
+12:48
+now, you are already convinced
+that we need another layer
+
+12:51
+of storage, another tier in the
+pod, closer, much closer to the...
+
+12:58
+Compute nodes, fast, we have all
+the numbers, we know what should be
+
+13:03
+the bandwidth of it, the capacity
+of it, the power of it, it's all
+
+13:06
+been calculated, you can find it.
+
+13:09
+But what's gonna be the
+software to use it?
+
+13:12
+And that's the big question.
+
+13:13
+Because we want to stay as
+efficient as possible.
+
+13:16
+What's the most efficient
+storage protocol?
+
+13:19
+It's block, right?
+
+13:21
+But block is not
+possible to share easily.
+
+13:25
+If you want to share your
+storage, you'll need to install
+
+13:27
+some kind of file system on
+top of it, distributed file system.
+
+13:32
+You can name many alternatives.
+
+13:35
+But that's already very complex.
+
+13:37
+It's shared, but it's feature-rich.
+
+13:41
+And we felt that there is something
+that is, there is room for a new
+
+13:45
+kind of storage that is in between,
+much closer to the block, and
+
+13:50
+very performant, but allows a bit
+more than what simple block allows.
+
+13:56
+Let's see the features.
+
+13:58
+What we're doing here is we're
+leveraging specific
+
+14:02
+Specific properties of the KV
+cache data as a data object
+
+14:07
+and we leverage it all the
+way into the storage system.
+
+14:11
+So what are these? First
+of all, IOS size.
+
+14:13
+Think about the KV caches,
+they are quite large.
+
+14:16
+They are fixed size.
+
+14:17
+Every model has a fixed size
+of a KV cache block.
+
+14:21
+So you can pre-configure your
+storage system to work with
+
+14:24
+this granularity of size, right?
+
+14:28
+In a legacy file system, you
+have to be flexible.
+
+14:31
+You can have files of one byte.
+
+14:32
+You can have files of gigabytes.
+
+14:34
+You have to address all that.
+
+14:36
+It's the mutability of it, right?
+
+14:39
+Once you write a KV cache block,
+you're not gonna change it.
+
+14:42
+Maybe you're gonna delete
+it and write something else,
+
+14:45
+but you're not gonna edit
+or change, modify some bytes in the
+
+14:48
+middle, as opposed to file system.
+
+14:50
+You need to support all that
+in the file system.
+
+14:53
+Durability.
+
+14:54
+What happens if you lose
+a KV cache block?
+
+14:57
+Not much. You can recalculate it.
+
+14:59
+You have the tokens.
+
+15:00
+You can recompute it.
+
+15:02
+Obviously, you don't want it
+to happen too often, because
+
+15:04
+then you miss the point of caching.
+
+15:07
+But the difference between a
+storage system that is guaranteed
+
+15:10
+to keep everything you save
+there 100% versus a system
+
+15:16
+that, let's say, 99.9% is amazing.
+
+15:20
+If you are storage people
+in the audience, you
+
+15:24
+appreciate this point.
+
+15:26
+Metadata, we try to keep it
+minimal, while file systems
+
+15:30
+and object storage need to
+deal with all the file names,
+
+15:32
+the keys, the many lookups,
+free busy lists, very difficult.
+
+15:37
+All this leads to having a write
+amplification very close to
+
+15:40
+one compared to whatever is normal
+for file systems, and also extend
+
+15:46
+the lifetime of the SSD by being
+very friendly to the SSD itself,
+
+15:50
+writing in big IOs, big chunks.
+
+15:53
+So all this we make together
+into what we call DOCA memos.
+
+15:57
+Basically, you have the two
+sides, you have the BlueField
+
+16:01
+sits in the compute node,
+and you have the BlueFields in
+
+16:04
+the data nodes, in the disk nodes,
+and both BlueFields are needed.
+
+16:08
+We have split the IO
+pipeline into both sides.
+
+16:14
+Because each side has its
+advantages, and we want it
+
+16:16
+to be as efficient as possible.
+
+16:18
+So whatever makes sense to run very
+close to the data, very close to
+
+16:22
+the disk, we run on that BlueField.
+
+16:23
+Whatever makes sense to run at
+the compute side, we do it there.
+
+16:28
+Obviously, the compute side
+BlueField, as Ariel mentioned,
+
+16:31
+is doing the isolation, kind
+of what we do with the snap
+
+16:36
+services you may be familiar with.
+
+16:39
+And the disk side is
+doing all these...
+
+16:44
+Data tasks that need to be
+closer to the data.
+
+16:47
+Why do we need sharing?
+
+16:49
+I think it's obvious, but
+just to illustrate it, think
+
+16:53
+about the case where you have,
+on the left side of the slide, you
+
+16:57
+have one, two, three, and four KV
+caches stuck in your local drives.
+
+17:03
+And you have now new prompts
+that refer to these 1, 2,
+
+17:07
+3, and 4 local KV caches.
+
+17:10
+You have to route them
+to the same nodes.
+
+17:13
+You may have two other nodes that
+are not utilized at all because
+
+17:15
+the KV caches are not there.
+
+17:17
+Okay, so that's pretty obvious.
+
+17:19
+If you had a shell storage,
+these one, two, three, four
+
+17:22
+KV caches could be accessible
+from any of the nodes.
+
+17:25
+You can easily spread your
+prompts to the nearest, to
+
+17:30
+the most efficient place where
+it can be calculated.
+
+17:36
+No consideration taken about
+in which drive it is.
+
+17:40
+This leads to a minimized DTFT.
+
+17:44
+Which is the experience of the
+user, instead of queuing for
+
+17:48
+a specific GPU, you get the best
+TTFT with the same utilization.
+
+17:56
+The way we plan for DocaMemos
+to be used is you actually
+
+18:01
+create a group of disks and
+you provide them as a KV volume
+
+18:06
+of a specific max KV block size.
+
+18:10
+So let's say you have a model,
+DeepSeek, that creates KV
+
+18:14
+cache blocks of 800K, so you
+can create one volume that
+
+18:19
+is up to one megabyte and share
+it between all the nodes, all the
+
+18:23
+compute nodes that use DeepSeek.
+
+18:26
+If you have LAMA70B that produces
+KV cache blocks of about 10
+
+18:31
+megabytes, you create a different
+volume, and you attach different
+
+18:35
+drives to it, and you can
+share this volume between
+
+18:40
+the nodes that are running LAMA70B.
+
+18:44
+You could have nodes that are
+running both models, that's fine.
+
+18:46
+You can share both
+volumes to one node.
+
+18:51
+And these are the different
+components that consist
+
+18:55
+of the DOCA memos.
+
+18:57
+Ariel mentioned them quickly.
+
+19:00
+So first of all, in the compute
+node itself, we have under
+
+19:04
+the Dynamo and Nixle layers,
+we have a new connector that
+
+19:09
+is using the host driver component.
+
+19:14
+Basically, a key value kind
+of API, store and retrieve.
+
+19:18
+You give it a key which is
+
+19:20
+Which normally is the prefix
+hash of the tokens, you give
+
+19:23
+it the value which is the
+KV you want to save.
+
+19:26
+It's going to be saved and when
+you need to retrieve it later
+
+19:29
+you just provide the same key.
+
+19:31
+This driver then moves the
+IO request down to the DPU.
+
+19:36
+In the DPU, there's first
+the emulation layer that I'm
+
+19:38
+not explaining here, but it
+receives this request and
+
+19:42
+passes it on to the other DocaMemos
+component that is the DPU side.
+
+19:48
+Again, another store and
+retrieve key value API.
+
+19:53
+And this layer will send this
+request over the network to
+
+19:58
+the correct CMX box.
+
+20:00
+In the CMX box, yet another DOCA
+memos component that is making
+
+20:04
+sure to correctly save the data in
+the correct format and layout that
+
+20:09
+we decided onto the actual drives.
+
+20:13
+So all of those APIs are key value.
+
+20:17
+The last one, the DOCA memos
+running on the CMX box, is
+
+20:21
+actually an API of blocks.
+
+20:24
+Read these blocks from
+these drives or write
+
+20:26
+these blocks to this drive.
+
+20:29
+And then there is the application.
+
+20:31
+So when we started working on
+POCing all this, we realized
+
+20:36
+that there are some small missing
+pieces in the application in the
+
+20:41
+inference frameworks as of today.
+
+20:44
+So I list them
+because it's important.
+
+20:46
+First of all, at the moment,
+we support up to 128-bit keys.
+
+20:52
+We think it's probably more
+than enough, but we're seeing
+
+20:55
+some thoughts about doing something
+bigger for the wrong reasons.
+
+20:58
+Never mind. Anyway, 128-bit
+keys at the moment.
+
+21:03
+Very important, in your inferencing
+system, in your application, don't
+
+21:08
+gather a pair KV cache metadata.
+
+21:12
+Because we expect the CMX
+box to be kind of infinite.
+
+21:16
+It's about 18 petabyte of data.
+
+21:19
+If you're going to keep metadata
+for every KV you save there,
+
+21:23
+it's gonna take all your DRAM
+or maybe need more.
+
+21:26
+So don't do it.
+
+21:28
+DOCA memos take care of it for
+you, and you should just enjoy it.
+
+21:33
+And as we said, you save a KV
+with a key, you then retrieve
+
+21:37
+it with the key, no problem.
+
+21:39
+Try to use huge pages.
+
+21:41
+These key values are quite big.
+
+21:44
+If you're using small 4K pages,
+you'll get the penalty of mapping
+
+21:48
+all these pages back and forth.
+
+21:49
+It's not the most
+optimal thing to do.
+
+21:54
+So try to use huge pages.
+
+21:57
+Avoid exist before retrieve.
+
+21:59
+This is something we saw in
+many of the inferencing system.
+
+22:03
+Before trying to retrieve a KV,
+they first check if it's there.
+
+22:08
+We say you don't need to do it.
+
+22:10
+For two reasons. First of
+all, the retrieve itself is
+
+22:13
+a kind of an exist check, because
+if it's not there, we'll just
+
+22:17
+reply to it's not there, right?
+
+22:18
+So what's the point?
+
+22:21
+But more important, there's
+no guarantee that if you asked
+
+22:26
+for exist and you got the
+response, yes, it exists,
+
+22:29
+that until the time that you try
+to retrieve it, it's still there.
+
+22:33
+As we said, it's
+not 100% guaranteed.
+
+22:35
+That everything you save there
+is staying there.
+
+22:38
+So it might get away.
+
+22:40
+So what's the point in doing it?
+
+22:42
+And of course, it's just extra
+ping pong over the network.
+
+22:46
+So avoid the exist, just
+try to retrieve it.
+
+22:49
+If it's not there, DOCA memos
+will try to answer you as
+
+22:52
+fast as possible that it's
+not there immediately.
+
+22:57
+And then,
+
+22:58
+As another result of the not
+100% guaranteed, you have
+
+23:02
+to correctly handle the case
+of something that was supposed to
+
+23:06
+be saved there and it's not, okay?
+
+23:08
+So basically you need to know
+how to respond to that by
+
+23:13
+either recalculating, this
+is what everyone's doing today,
+
+23:16
+maybe it's saved in another
+tier, maybe in a later tier
+
+23:19
+like a G4 or something, you can go
+search for it there, but you should
+
+23:23
+be prepared for a retrieve to fail.
+
+23:27
+And then something that we
+also believe is gonna be pretty
+
+23:29
+important is the ability to
+calculate context holes.
+
+23:34
+This, again, is something
+that did not exist until now
+
+23:38
+because with the 100% guarantee
+of everything you saved is
+
+23:43
+still there, either you got to
+a point in your inference where you
+
+23:50
+have all the KV caches before it,
+
+23:53
+Or you don't, right?
+
+23:54
+So you know until which point you
+arrived, and you know for sure
+
+23:57
+that you saved all the previous
+blocks, so you know they're there.
+
+24:01
+Now it's not 100% certain,
+so it might be that a certain
+
+24:05
+block in your context is missing.
+
+24:09
+If you were to assume that because
+this is missing, then all the rest
+
+24:12
+are missing, you are not using the
+great power of this storage system.
+
+24:17
+So be prepared to recalculate
+only what's missing.
+
+24:21
+We know it's possible, and we
+know that, for instance, in vLLM,
+
+24:25
+this is being addressed, and we're
+also taking care of it in Dynamo,
+
+24:30
+as you will see in a second.
+
+24:35
+And the last thing is don't
+forget your routing function that
+
+24:40
+picks the right server to the right
+node to continue the agent work.
+
+24:48
+Because you can now choose
+freely any node that you want.
+
+24:53
+If it's saved in the CMX,
+in the doca memos volume,
+
+24:58
+it's available on every node.
+
+25:00
+So your routing function should
+account for it and correctly
+
+25:05
+use this capability.
+
+25:10
+And we're on to...
+
+25:14
+Thank you, Oren, Ariel,
+Ronil, Odoketim for inviting
+
+25:19
+me to talk today.
+
+25:21
+Looking at the inference stack,
+top to bottom, what does it
+
+25:26
+mean to actually do inference?
+
+25:28
+How do we need to
+move KV cache around?
+
+25:30
+Looking at the top, we have
+the pre-filled decode, we
+
+25:33
+sweep over the Pareto.
+
+25:35
+Some of the Pareto optimal points
+are disaggregated, we need to
+
+25:38
+move the KV cache on the east-west.
+
+25:41
+And then everything we discussed
+until now, basically, I want
+
+25:44
+to reuse the KV cache.
+
+25:46
+So I also have a data movement
+to and from the storage
+
+25:50
+to the GPU workers.
+
+25:52
+And that's basically what
+you see here in the top.
+
+25:54
+Doing a pre-filter decode and KV
+offload together with Nixle is
+
+25:59
+the fundamental, I think, idea The
+idea behind that, we realized that
+
+26:03
+The inference data path is
+actually heterogeneous.
+
+26:06
+It means for a single request,
+we involve multiple resources,
+
+26:10
+storage resources for different
+memory and storage hierarchies,
+
+26:13
+and then GPU to GPU transfers.
+
+26:16
+All that goodness is built
+on the Dynamo stack.
+
+26:20
+Dynamo stack gives capabilities
+such as KV routing, like
+
+26:24
+mentioned before, but not
+only that, also topology
+
+26:27
+aware and Kubernetes scheduling,
+Kubernetes orchestration,
+
+26:32
+components like NVIDIA or Dynamo
+Grove, the KV router, all of these
+
+26:37
+will take care of the orchestration
+and the routing and management
+
+26:40
+of how do we deal with the requests
+throughout the entire cluster.
+
+26:44
+Like Oren and Ariella
+mentioned before, so we
+
+26:47
+have multiple storage tiers.
+
+26:50
+And each tier serves a different
+kind of function for us.
+
+26:54
+The GPU, HBM, and the host
+memory, for the most part,
+
+26:58
+are being managed by the framework,
+where it actually uses to
+
+27:01
+page in, page out, and preempt
+those different requests.
+
+27:04
+Host memory for KV offload, for KV
+that needs to be really close and
+
+27:08
+needs to be reused very quickly.
+
+27:10
+But then there could be other
+usages for local SSD, network
+
+27:14
+storage, and I think the novelty
+that we're discussing today is
+
+27:17
+the CMX is the new tier that brings
+the additional value to that.
+
+27:23
+All of that we build over the
+NVIDIA Spectrum-X Ethernet,
+
+27:27
+definitely getting the speed
+of light optimizations for any
+
+27:30
+network optimizations for whoever
+using the Spectrum-X fabric, and
+
+27:34
+beneath that the context memory.
+
+27:38
+Looking at what needs to be done
+from the framework perspective
+
+27:41
+to support KV offload at scale is
+essentially all the optimizations
+
+27:47
+that Oren mentioned, KV, user page
+support, and host optimizations,
+
+27:52
+but there's actually a lot more
+looking forward into the future.
+
+27:57
+Part of the work that we're
+doing right now is how do
+
+27:59
+you deal with partial KV retrieval?
+
+28:01
+What kind of metrics can you
+monitor on the framework level
+
+28:04
+to make workload-aware decisions
+regarding on how I want to
+
+28:09
+manage my context, what I
+want to cache or not?
+
+28:13
+Whether I want to do
+compression or not.
+
+28:15
+If there's memory or KBlocks that
+I would like to pin in a specific
+
+28:18
+tier to give SLA guarantees, or
+perhaps there's different eviction
+
+28:23
+policies that do not conform
+to the standard eviction policies
+
+28:26
+that we all know that will perform
+optimally for different workloads.
+
+28:30
+We need to remember that
+inference workloads
+
+28:33
+The matrix and the
+variance is huge.
+
+28:37
+And there's many different
+settings, tool calling, agentic
+
+28:41
+AI, chatbots, and thinking.
+
+28:44
+All of these pose
+different constraints
+
+28:46
+and requirements on the system.
+
+28:50
+So if we're looking at how
+do we drive all that?
+
+28:53
+So a year ago, we launched Nixle,
+NVIDIA Inference Transfer Library.
+
+28:59
+That was last GTC.
+
+29:00
+And we had the foresight to kind
+of realize that the data path is
+
+29:05
+heterogeneous, like I said before.
+
+29:07
+And that there is going to
+be a huge explosion in scale
+
+29:11
+that is going to be needed for both
+workers, GPU workers, and storage.
+
+29:16
+And on top of all of that,
+we realized that we want to
+
+29:20
+build it in a dynamic fashion.
+
+29:22
+So we created Nixle, and the
+architecture is what you see here.
+
+29:25
+We basically decoupled
+the front-end API from
+
+29:27
+the back-end API.
+
+29:27
+And in between, we have the core
+that gives all these services
+
+29:30
+that are here on the slide.
+
+29:31
+But the key point is that we
+drive the innovation through.
+
+29:34
+By integrating to all the major
+frameworks, TRT-LLM, VLM, SGLang,
+
+29:39
+Dynamo KVBM, LMCache, SGLang
+HiCache, Anyscale Ray, you'll
+
+29:45
+find Nixle integrated in all of
+them and default in most of them.
+
+29:49
+Giving a single unified API
+for all these data movements
+
+29:53
+that I mentioned before, the
+heterogeneous data movement,
+
+29:55
+both east-west memory-to-memory,
+GPU-to-GPU, and storage.
+
+29:59
+Throughout the last year, we worked
+a lot to bring many capabilities
+
+30:04
+to Nixle, giving Anvilink,
+RDMA, GPU-initiated communication.
+
+30:08
+We worked together to support
+AWS Tranium and Inferentia,
+
+30:12
+courtesy of AWS Contribution.
+
+30:14
+Broadcom, Slingshot, AWS CFA,
+all of these are fabrics that
+
+30:18
+are supported, but on the
+storage side, we work with all
+
+30:20
+our partners to support a plethora
+of storage technologies from
+
+30:24
+block S3, S3 RDMA, Streamlight,
+through Nixle, DeepSeek, 3FS.
+
+30:29
+Azure Blob, GCP is coming
+together, and now on top of
+
+30:34
+that, we're adding the support
+to CMX via DOCA memos.
+
+30:39
+That's the SDK that Warren
+mentioned before.
+
+30:42
+Nixle v1 is
+released just this week.
+
+30:45
+You can use it to install Nixle.
+
+30:46
+There's going to be a session
+called Breaking Communication
+
+30:48
+Barriers on Thursday.
+
+30:50
+It's going to do a deep dive
+on Nixle if you're interested.
+
+30:57
+Two slides of some
+simulations that we've done.
+
+31:01
+We don't have real
+performance data yet.
+
+31:05
+We're just in the middle
+of POCing all that.
+
+31:10
+This is to convince you that
+sharing is important.
+
+31:12
+So in the red line, you'll
+see the Pareto of when you
+
+31:19
+don't have a shared storage.
+
+31:21
+When you introduce shared storage,
+As you see it immediately,
+
+31:24
+It becomes a straight line on
+the 100% GPU utilization, or
+
+31:29
+very close to 100% GPU utilization.
+
+31:33
+And then it drops at the end.
+
+31:35
+So basically this means you
+can either, if you look at
+
+31:38
+the green line from 375, these
+are 375 concurrent users.
+
+31:45
+Same 375 concurrent users, but
+now with the shared storage,
+
+31:49
+you get much better tokens
+This is per user.
+
+31:53
+Tokens per second per user and
+100% utilized cluster, right?
+
+32:01
+Or if you look at it in another
+way, if you want, take the
+
+32:05
+500 concurrent users and you
+want to keep the same TPS
+
+32:09
+per user, the same service to the
+users, but now you can run 700 or
+
+32:16
+750 concurrent users just because
+you're able to leverage your
+
+32:20
+cluster much, Much better, 200%.
+
+32:24
+That's the basics of sharing
+versus not sharing, and this
+
+32:28
+is really a simulation that
+was running with all the right
+
+32:32
+numbers of, I don't know,
+100 GPUs, assuming some number
+
+32:36
+of steps per agent, and so on.
+
+32:41
+And the other simulation is because
+when talking about this innovative
+
+32:48
+storage system, this new class
+of storage system, people ask,
+
+32:52
+okay, so it's not 100% guarantee.
+
+32:54
+We understand how
+much is guaranteed.
+
+32:57
+We did many simulations around
+it and we try to use real
+
+33:00
+numbers as much as we can and we
+see it keeps staying at the range
+
+33:05
+of 99.8 percent heat rate, meaning
+what you saved is 99.8 percent
+
+33:13
+Most likely will still be there.
+
+33:15
+This translates to a
+very good, good put.
+
+33:19
+Okay, what is good put? This
+is very important.
+
+33:22
+A lot of everyone are testing
+the GPU utilization by the
+
+33:27
+tokens per second it produces.
+
+33:29
+But some of the tokens...
+
+33:31
+You don't want the GPU to
+produce because it's the second
+
+33:34
+time it produces them, right?
+
+33:36
+It's the recalculation.
+
+33:37
+So we're calling goodput the
+rate of tokens that you created
+
+33:42
+that are really new, not something
+that could have been saved
+
+33:45
+in some storage and just reloaded
+without the GPU doing them again.
+
+33:49
+So this is good put.
+
+33:51
+And again, our simulations with
+those numbers, with the real
+
+33:55
+expected CMX box of 18 petabytes
+and a thousand GPUs, by the way,
+
+34:00
+in this case, all of the thousand
+GPUs are doing pre-fill, which
+
+34:03
+is not the common case, right?
+
+34:05
+There will be some kind of, I
+don't know, two to one relation
+
+34:08
+between pre-fill and compute.
+
+34:10
+But anyway, with these numbers,
+we can see 99.8 hit rate and
+
+34:16
+above 96% of a good boot,
+meaning you're almost 100%
+
+34:21
+utilizing your precious cluster.
+
+34:27
+That's about it.
+
+34:28
+We'll close by reminding you
+everything we discussed.
+
+34:33
+So first of all, there is the
+agentic shift that requires
+
+34:36
+more KV that needs to arrive
+faster to the node and it's larger,
+
+34:41
+so it needs a larger storage.
+
+34:43
+Trying to scale the existing
+storage, either in G4 or the
+
+34:48
+local SSDs, does not scale.
+
+34:53
+It either requires too much
+power or cost, or it doesn't
+
+34:56
+fit in Node or whatever, which
+means you need a new tier,
+
+35:00
+and CMX and Docker Memos, they
+provide this new tier together.
+
+35:06
+And then Dynamo and Excel as
+the layers of the inferencing
+
+35:11
+system that correctly utilize
+CMX and Docker memos, as we showed.
+
+35:17
+All this will enable you more
+users, longer context window,
+
+35:21
+and larger models.
+
+35:23
+That's what we want, right?
+
+35:27
+Okay, we have a couple more
+minutes for questions if you want.
+
+35:30
+Maybe we can all join.
+
+35:34
+So my question is for Oren.
+
+35:39
+Can you?
+
+35:41
+You don't have to see me.
+
+35:42
+It's okay.
+
+35:43
+So just wanting to make sure
+I'm 100% clear, the KV is
+
+35:48
+implemented on the storage side,
+and then it is snapped or moved.
+
+35:55
+The whole magic of your
+snap technology is moved
+
+35:58
+to the client side.
+
+35:59
+It's visible on the BlueField-4,
+on the client side, basically.
+
+36:03
+But KV implementation, the
+operations like...
+
+36:08
+Exists, retrieve, et cetera,
+are all actually the metadata
+
+36:11
+and KV related, all that is
+implemented down on the storage
+
+36:15
+node side, right?
+
+36:16
+On the Docker memos libraries
+between, as I said, the
+
+36:19
+logic is split between the
+DPU on the compute side
+
+36:23
+and the BlueField on the
+data node side where the disks are.
+
+36:26
+So the logic is between them.
+
+36:28
+All the KV metadata, everything
+that is needed is kept there
+
+36:31
+between these two.
+
+36:33
+So your application don't
+need to worry about it.
+
+36:35
+Just provide the same key the
+next time, you'll get the KV.
+
+36:39
+But that split is exactly the
+ambiguity I'm trying to clarify.
+
+36:43
+If I were to implement my
+own CMX and using your APIs,
+
+36:53
+basically the KV is implemented
+on the storage side, right?
+
+36:58
+So, again, the
+answer doesn't change.
+
+37:01
+It's a combination of two,
+and we have our own protocol
+
+37:04
+between the two sides.
+
+37:06
+Okay, so if you were to implement
+the CMX box, you'll need to
+
+37:10
+take the SDK for the CMX box
+from us and integrate with it.
+
+37:15
+We'll provide it as a Docker
+library, part of the Memos SDK,
+
+37:19
+with clear APIs, documentation,
+and everything you need.
+
+37:27
+So I think we have time for
+one more question.
+
+37:40
+You mentioned that the DOCA
+memo is a sprited compute
+
+37:44
+node and storage node, is
+this mandatory for the... Actually,
+
+37:51
+fundamentally, I'm curious why you
+make the BluePage storage node, and
+
+37:57
+then you load the DOCA memo, and
+then this sprited software, so it
+
+38:02
+looks like some overhead, actually.
+
+38:07
+If I think that simply DOCA
+Memo Compute Node is necessary
+
+38:12
+but storage node size is not
+necessary, why did you make
+
+38:17
+the two different Bluefield
+Compute Node and the Story Node,
+
+38:21
+and then software also distributed
+such kind of the two different API?
+
+38:27
+Yeah, so the answer is yes,
+we need both sides.
+
+38:32
+As I said, there are some
+pieces in this data path in
+
+38:37
+the logic that makes sense
+to put very close to where the data
+
+38:40
+is before starting to send it over.
+
+38:44
+To the compute side, we can do
+some things there and we want
+
+38:49
+to do it very close to the data.
+
+38:51
+We want to stay as
+efficient as possible,
+
+38:54
+lowest power and everything.
+
+38:56
+So these were decisions driven from
+the optimal place to do every task.
+
