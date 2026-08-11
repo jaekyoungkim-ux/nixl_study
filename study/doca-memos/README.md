@@ -12,6 +12,36 @@
 
 ---
 
+## 이번 스터디의 초점 — BlueField가 NVMe SSD로 보이는 방법
+
+MEMOS의 여러 역할 중 **[API 표면 제공](#시스템-전반에서의-역할)** 하나에 집중한다.
+BlueField를 NIXL 백엔드로 붙이는 일이 결국 이 계층을 이해하는 일이기 때문이다.
+
+**"SSD인 척 속인다"기보다 표준을 준수한다.** 호스트 입장에서 그것은 **진짜 NVMe 컨트롤러**다 —
+BlueField가 PCIe 레벨에서 컨트롤러를 하드웨어 에뮬레이션하므로 드라이버 shim도 커널 모듈도 없다.
+리눅스 표준 NVMe 드라이버가 그냥 바인딩하고 `/dev/nvme0n1`이 생긴다.
+다른 점은 하나뿐 — **뒤에 붙은 것이 SSD 한 장이 아니라 pod 전체가 공유하는 18PB 플래시**라는 것.
+
+정체는 **NVMe Key Value Command Set**(NVM Express 표준)이다. 근거가 정확히 맞물린다:
+
+| 코드 / 발표 | NVMe KV Command Set 표준 |
+|---|---|
+| `DOCA_MEMOS_MAX_OBJECT_KEY_LEN = 16` | 최대 키 **16바이트** (초과 시 Invalid Field in Command) |
+| 발표: *"128-bit keys at the moment"* | 16바이트 = 128비트, **정확히 일치** |
+| 플러그인의 STORE / RETRIEVE / EXIST | KV 명령 집합의 동사 (Store, Retrieve, Delete, Exist, List) |
+| `doca_kvdev_get_max_key_len()` / `_value_len()` | Identify Namespace의 KV 용량 필드 |
+| `nguid` 파라미터 | NVMe 네임스페이스 식별자 |
+
+NVIDIA 블로그의 *"standard NVMe and NVMe-oF transports, **including NVMe KV extensions**"* 가 이를 뒷받침한다.
+
+**실질적 이득**: 표준이라서 **플러그인은 `/dev/nvme0n1`이라는 경로 하나만 알면 된다.**
+BlueField도 Spectrum-X도 CMX 박스도 코드에 등장하지 않는다.
+`doca_nvme_kernel_kvdev`의 `nvme_kernel`이 곧 "커널 NVMe 드라이버를 통과한다"는 뜻이다.
+
+> 상세는 코드 리뷰 단계에서. 스펙 원문: [NVMe KV Command Set Specification](https://nvmexpress.org/wp-content/uploads/NVM-Express-Key-Value-Command-Set-Specification-Revision-1.3-2025.08.01-Ratified.pdf)
+
+---
+
 ## 용어 정리
 
 본문을 읽기 전에 짚고 갈 용어들. 셋 다 일상적인 단어지만 이 맥락에서 뜻이 좁게 정해져 있고, 특히 pod는 흔히 오해된다.

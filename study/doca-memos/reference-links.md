@@ -77,6 +77,24 @@ CMX용으로 권장하는 실제 드라이브 모델을 명시한다:
 
 ---
 
+## 표준
+
+### NVM Express — Key Value Command Set Specification
+<https://nvmexpress.org/wp-content/uploads/NVM-Express-Key-Value-Command-Set-Specification-Revision-1.3-2025.08.01-Ratified.pdf>
+
+**DOCA MEMOS 호스트 API의 정체.** BlueField가 호스트에 에뮬레이션해 보여주는 것이 이 표준을 따르는
+NVMe 컨트롤러다. DOCA 4.0 문서가 비공개인 지금, **`doca_kvdev` API의 의미를 해석할 수 있는 유일한 공개 근거**다.
+
+확인되는 대응:
+- **최대 키 16바이트** — 플러그인의 `DOCA_MEMOS_MAX_OBJECT_KEY_LEN = 16`, 발표의 *"128-bit keys"* 와 정확히 일치
+- 명령 동사 **Store / Retrieve / Delete / Exist / List** — 플러그인이 쓰는 STORE / RETRIEVE / EXIST가 그중 셋
+- Identify Namespace의 KV 용량 필드 — `doca_kvdev_get_max_key_len()` / `_max_value_len()`
+
+리비전은 1.0a(2021)부터 1.3(2025-08)까지 있으며 위 링크는 최신본이다.
+16바이트 키 상한은 전 리비전 공통.
+
+---
+
 ## 코드
 
 ### ai-dynamo/nixl PR #1717 — DOCA MEMOS Backend
