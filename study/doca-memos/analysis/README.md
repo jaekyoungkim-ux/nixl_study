@@ -536,5 +536,6 @@ git log --oneline main..pr-1717
 요청이 사용자에서 CMX까지 어떤 모습으로 변해가는지, NIXL의 구조와 PR #1717의 자리는
 [request-flow.md](./request-flow.md) 참조.
 
-관련 자료 목록은 [reference-links.md](./reference-links.md) 참조.
-발표 전문은 [gtc2026-s81773-transcript.txt](./gtc2026-s81773-transcript.txt).
+관련 자료 목록은 [reference-links.md](../reference-links.md) 참조.
+발표 전문은 [gtc2026-s81773-transcript.txt](../gtc2026-s81773-transcript.txt).
+다음에 무엇을 어떤 순서로 읽을지는 [study_guide.md](../study_guide.md).

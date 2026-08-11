@@ -1,6 +1,6 @@
 # CMX / DOCA MEMOS 참고 자료
 
-분석 노트는 [README.md](./README.md) 참조.
+분석 노트는 [analysis/README.md](./analysis/README.md) 참조.
 
 ---
 
