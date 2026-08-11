@@ -54,6 +54,54 @@ NVIDIA DGX SuperPOD가 대표 사례이고 랙 여러 개 규모다. 발표의 �
 CMX가 굳이 pod 레벨인 이유가 여기 있다. node-level은 공유가 안 되고, datacenter-level은 너무 멀다.
 *"GPU 메모리의 연장선"* 이라는 표현도 이 거리감에서 나온다 — 패브릭 하나만 건너면 닿는다.
 
+### 인터커넥트 계층 — scale-up / scale-out / scale-across
+
+위 표가 *범위*라면, 이건 그 범위를 **무엇이 물리적으로 이어주는가**다. NVIDIA는 3단계로 부른다.
+
+| 범위 | NVIDIA 용어 | 연결 수단 | 통신 방식 |
+|---|---|---|---|
+| 노드(~랙) 안 | **scale-up** | **NVLink + NVSwitch** | 메모리 시맨틱 — load/store |
+| pod 안 | **scale-out** | **InfiniBand(Quantum-X)** 또는 **Spectrum-X 이더넷** | 메시지/RDMA 시맨틱 |
+| 데이터센터 간 | **scale-across** | **Spectrum-XGS 이더넷** | 동일 (거리만 확장) |
+
+**노드 안 — NVLink / NVSwitch**
+- **NVLink** = GPU와 GPU를 잇는 링크 자체
+- **NVSwitch** = 링크들을 모아 모든 GPU가 서로 full 대역폭으로 통신하게 하는 스위치 칩
+- 결정적 성질은 **메모리 일관성(memory-coherent)**. GPU가 다른 GPU 메모리를 **자기 메모리처럼 직접 읽고 쓴다.** 명시적 "전송"이 아니라 포인터 접근이다
+- 주의: **"노드 한 대"라는 경계는 이미 흐려졌다.** GB200 NVL72처럼 랙 하나(GPU 72장)가 통째로 하나의 NVLink 도메인인 구성이 있다. 정확히는 "노드 안"이 아니라 **"scale-up 도메인 안"**
+
+**pod 안 — scale-out 패브릭**
+- 여기서 성격이 근본적으로 바뀐다. **NVLink가 끊기고 NIC을 거친다**
+- **RDMA** — 상대 메모리에 직접 쓰지만 load/store가 아니라 명시적 전송 요청
+- **GPUDirect RDMA**로 NIC이 GPU 메모리에 직접 DMA. CPU와 호스트 메모리를 경유하지 않는다
+- 발표의 *"move the KV cache on the east-west"* 에서 **east-west**가 이 구간 (노드 간 횡방향 트래픽)
+- **CMX는 Spectrum-X 이더넷을 쓴다.** InfiniBand가 아니라 이더넷을 고른 것은 스토리지 파트너 생태계와 붙기 위한 선택으로 보인다 *(추론)*
+
+#### 이 계층 구분이 이 프로젝트의 핵심인 이유
+
+**NVLink와 scale-out 사이에는 대역폭 절벽이 있다.** 세대마다 다르지만 Blackwell 기준
+NVLink는 GPU당 양방향 1.8TB/s 수준인 반면 800Gb/s NIC은 100GB/s다. 한 자릿수 배가 아니라 **십수 배** 차이다.
+
+여기서 **CMX가 왜 이더넷 건너편에 있어야만 하는지**가 나온다.
+
+> NVLink 도메인은 scale-up 경계(노드~랙) 안에서만 유효하다. 그런데 **pod 전체가 KV 캐시를 공유**하려면
+> 그 경계를 넘어야 하고, 넘는 순간 **무조건 scale-out 패브릭을 통과**해야 한다. 선택지가 없다.
+
+[1장의 계층 표](#1-문제-정의--왜-만들었나)와 겹쳐보면:
+
+| 계층 | 어디에 | 어떻게 닿나 |
+|---|---|---|
+| G1 (HBM) | 자기 GPU | 직접 |
+| G2 (호스트 DRAM) | 자기 노드 | PCIe |
+| G3 (로컬 SSD) | 자기 노드 | PCIe — **그래서 공유 불가** |
+| **G3.5 (CMX)** | **pod 안 별도 박스** | **Spectrum-X + RDMA** |
+| G4 (네트워크 스토리지) | 데이터센터 | 같은 패브릭이지만 홉이 더 많음 |
+
+그리고 이것이 **BlueField가 이 로직의 자리인 이유**다. 어차피 이더넷을 건너야 한다면,
+그 관문에 앉아 있는 NIC/DPU가 KV 저장·암호화·무결성을 처리하는 것이 가장 자연스럽다. GPU도 CPU도 건드리지 않고.
+
+바꿔 말하면 — **G3.5는 "NVLink로는 닿을 수 없지만 최대한 가깝게"를 물리적으로 구현한 계층**이다.
+
 ### TPS (Tokens Per Second)
 
 **초당 생성 토큰 수.** 스토리지 문맥이라 transactions per second로 읽기 쉬운데 아니다.
@@ -102,7 +150,7 @@ CMX가 굳이 pod 레벨인 이유가 여기 있다. node-level은 공유가 안
 | 정식 명칭 | Context Memory eXtension |
 | 공개 경로 | CES 2026 개념 발표 → GTC 2026 실물 박스 + 데모 |
 | 위치 | [팟(pod)](#pod-팟) 레벨 공유. GPU 메모리의 연장선으로 취급 |
-| 구성 | BlueField-4 스토리지 프로세서(Vera CPU 내장) + NVMe SSD 액침냉각 JBOF + Spectrum-X 이더넷(RoCE) |
+| 구성 | BlueField-4 스토리지 프로세서(Vera CPU 내장) + NVMe SSD 액침냉각 JBOF + [Spectrum-X 이더넷(RoCE)](#인터커넥트-계층--scale-up--scale-out--scale-across) |
 | 규모 | 박스 하나당 **약 18페타바이트** (발표에서 명시) |
 | 주장 성능 | 일반 스토리지 대비 **[TPS](#tps-tokens-per-second) 5배, 전력 효율 5배** |
 | 파트너 | NVIDIA 설계 → 스토리지 파트너가 제조·납품. Solidigm(D7-PS1010 Gen5 TLC / D5-P5336 QLC 122TB), ScaleFlux 등이 대응 발표 |
