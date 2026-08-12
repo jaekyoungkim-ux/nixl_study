@@ -294,5 +294,6 @@ releaseReqH   "                        → progressEngine_->cancelRequest()
 ---
 
 다음: `doca_memos_progress_engine.cpp` (1,039줄) — 실제 KV 명령이 조립되는 곳.
+이어지는 노트는 [progress-engine-flow.md](./progress-engine-flow.md).
 
-관련: [README.md](./README.md) · [request-flow.md](./request-flow.md) · [../annotated/](../annotated/)
+관련: [README.md](./README.md) · [request-flow.md](./request-flow.md) · [progress-engine-flow.md](./progress-engine-flow.md) · [../annotated/](../annotated/)
