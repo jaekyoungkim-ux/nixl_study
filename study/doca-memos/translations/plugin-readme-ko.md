@@ -7,7 +7,7 @@
 > SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 > SPDX-License-Identifier: Apache-2.0
 >
-> [study_guide.md](./study_guide.md)의 **①단계** 자료. ⓪단계는 [backend-guide-ko.md](./backend-guide-ko.md).
+> [study_guide.md](../study_guide.md)의 **①단계** 자료. ⓪단계는 [backend-guide-ko.md](./backend-guide-ko.md).
 
 ---
 
@@ -258,4 +258,4 @@ threaded면 progress thread가, no-thread면 다음 `checkXfer()` / `queryMem()`
 
 ---
 
-관련 문서: [study_guide.md](./study_guide.md) · [backend-guide-ko.md](./backend-guide-ko.md) · [analysis/README.md](./analysis/README.md) · [analysis/request-flow.md](./analysis/request-flow.md)
+관련 문서: [study_guide.md](../study_guide.md) · [backend-guide-ko.md](./backend-guide-ko.md) · [analysis/README.md](../analysis/README.md) · [analysis/request-flow.md](../analysis/request-flow.md)

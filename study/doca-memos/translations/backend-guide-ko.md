@@ -2,13 +2,13 @@
 
 > `docs/BackendGuide.md`의 한국어 번역. API 이름·타입명·핵심 개념어는 영어를 유지했다.
 >
-> **원문**: [`docs/BackendGuide.md`](../../docs/BackendGuide.md)
+> **원문**: [`docs/BackendGuide.md`](../../../docs/BackendGuide.md)
 > SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 > SPDX-License-Identifier: Apache-2.0
 >
-> [study_guide.md](./study_guide.md)의 **⓪단계** 자료다. 이 문서를 읽지 않고 플러그인 코드를 보면
+> [study_guide.md](../study_guide.md)의 **⓪단계** 자료다. 이 문서를 읽지 않고 플러그인 코드를 보면
 > 그 함수들이 왜 존재하는지 알 수 없다. 계약 원문은 산문이 아니라
-> [`src/api/cpp/backend/backend_engine.h`](../../src/api/cpp/backend/backend_engine.h)의 virtual **26개**다.
+> [`src/api/cpp/backend/backend_engine.h`](../../../src/api/cpp/backend/backend_engine.h)의 virtual **26개**다.
 > (`grep -c virtual`는 주석 3줄을 같이 세어 29를 반환한다.)
 
 ---
@@ -19,7 +19,7 @@ NIXL(NVIDIA Inference Xfer Library)은 LLM serving 같은 분산 inference workl
 
 이는 NIXL의 Transfer Agent와 여러 backend plugin 사이의 표준화된 인터페이스 역할을 하는 **South Bound API(SB API)** 를 통해 달성된다. NIXL agent는 backend plugin에 등록된 local memory에 대한 bookkeeping을 담당하며, local 또는 remote 전송에 대한 one-sided transfer(즉 Read 및 Write 연산)에 필요한 metadata 관리도 담당한다. 다음 다이어그램이 이 구성 요소들을 더 자세히 보여준다.
 
-![Figure of NIXL high level architecture](../../docs/figures/nixl_high_level.png)
+![Figure of NIXL high level architecture](../../../docs/figures/nixl_high_level.png)
 
 각 backend는 고유한 특성과 기능을 가질 수 있다. 예를 들어 UCX는 system memory 및/또는 GPU memory 사이에서 데이터 이동을 수행하는 고성능 통신 라이브러리인 반면, GPUDirect Storage(GDS)는 storage disk와 GPU memory 사이에서 데이터를 옮길 수 있다. 이렇게 다양한 transport를 관리하고 NIXL의 dynamicity를 보장하려면, inference app의 transport 요구사항에 따라 라이브러리를 **on-demand로 로드**할 수 있어야 한다. 이 on-demand 요구를 위한 추가 API 집합이 SB API와 함께 라이브러리에 구현되어야 하며, 그래야 NIXL에 pluggable한 **NIXL Plugin**이라 불릴 수 있다.
 
@@ -31,7 +31,7 @@ NIXL은 모듈식 plugin architecture를 구현하며, 각 backend는 SB API를 
 
 SB API의 일부 method는 반드시 구현할 필요는 없다는 점에 유의하라. 예를 들어 어떤 backend가 notification을 지원하지 않는다면 `supportsNotif()` method를 통해 그 사실을 알릴 수 있고, 이 method가 false를 반환하면 agent는 그 backend에 notification이 포함된 request를 보내지 않는다. 이러한 **capability indicator가 4개** 있으며, 각각에 대해 어떤 API를 구현해야 하는지는 아래에서 더 자세히 설명한다.
 
-![NIXL SB API](../../docs/figures/nixl_sb_api.png)
+![NIXL SB API](../../../docs/figures/nixl_sb_api.png)
 
 ## The South Bound API
 
@@ -73,7 +73,7 @@ key/value parameter는 Agent에서 전달되는 string → byte array의 map이�
 
 각 backend는 registration마다 필요한 metadata를 저장하기 위해 `nixlBackendMD` base class를 상속한다. 이 class 객체에 대한 pointer가 `registerMem`의 출력이 되며, `deregisterMem`의 **유일한 입력**이 된다.
 
-`FILE_SEG`를 지원하는 backend를 위해 NIXL은 공용 **path-mode** helper(`nixl::parsePathMeta()` + `nixlFilePathMD`)를 제공한다. 이를 통해 호출자는 미리 open된 fd 대신 `nixlBlobDesc::metaInfo`에 path를 담아 파일을 등록할 수 있다. [`src/utils/file/README.md`](../../src/utils/file/README.md#path-mode-file-registration)를 참고하라.
+`FILE_SEG`를 지원하는 backend를 위해 NIXL은 공용 **path-mode** helper(`nixl::parsePathMeta()` + `nixlFilePathMD`)를 제공한다. 이를 통해 호출자는 미리 open된 fd 대신 `nixlBlobDesc::metaInfo`에 path를 담아 파일을 등록할 수 있다. [`src/utils/file/README.md`](../../../src/utils/file/README.md#path-mode-file-registration)를 참고하라.
 
 ### Metadata Management
 
@@ -271,4 +271,4 @@ PR #1717 코드를 읽는 동안 계속 되돌아오게 되는 지점들이다.
 
 ---
 
-관련 문서: [study_guide.md](./study_guide.md) · [analysis/README.md](./analysis/README.md) · [analysis/request-flow.md](./analysis/request-flow.md)
+관련 문서: [study_guide.md](../study_guide.md) · [analysis/README.md](../analysis/README.md) · [analysis/request-flow.md](../analysis/request-flow.md)
