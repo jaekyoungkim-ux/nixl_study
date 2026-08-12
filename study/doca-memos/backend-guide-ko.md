@@ -8,7 +8,8 @@
 >
 > [study_guide.md](./study_guide.md)의 **⓪단계** 자료다. 이 문서를 읽지 않고 플러그인 코드를 보면
 > 그 함수들이 왜 존재하는지 알 수 없다. 계약 원문은 산문이 아니라
-> [`src/api/cpp/backend/backend_engine.h`](../../src/api/cpp/backend/backend_engine.h)의 virtual 29개다.
+> [`src/api/cpp/backend/backend_engine.h`](../../src/api/cpp/backend/backend_engine.h)의 virtual **26개**다.
+> (`grep -c virtual`는 주석 3줄을 같이 세어 29를 반환한다.)
 
 ---
 
@@ -258,6 +259,15 @@ PR #1717 코드를 읽는 동안 계속 되돌아오게 되는 지점들이다.
 
 - `queryMem()` — 헤더의 **optional** 섹션에 있으나 가이드에 언급 없음. DOCA_MEMOS가 구현하는 유일한 선택적 method다
 - `prepMemView()` / `releaseMemView()` — 헤더에 있으나 가이드에 없음. DOCA_MEMOS는 기본 구현(`NIXL_ERR_NOT_SUPPORTED`)을 그대로 둔다
+
+### 코드와 정면으로 어긋나는 서술 두 곳
+
+| 가이드 서술 | 실제 |
+|---|---|
+| **Create transfer request**: *"이 API는 backend SB API를 호출하지 않는다"* | **`prepXfer()`를 호출한다.** `nixl_agent.cpp`의 `createXferReq`(1049행)와 `makeXferReq`(904행) 양쪽 모두 |
+| **Post transfer request**: *"이 호출의 결과로 backend transfer handle이 생긴다"* | 핸들은 **`prepXfer()`가 만든다.** `postXfer()`는 기존 핸들을 캐스팅해 재사용 |
+
+둘 다 결론(*"이 단계에서 전송은 아직 개시되지 않는다"*)은 유효하다. 호출 주체만 서술이 낡았다.
 
 ---
 
