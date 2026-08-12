@@ -182,6 +182,7 @@ private:
 // ▶▶▶ 백엔드 엔진 본체. nixlBackendEngine(SB API) 을 구현한다.
 //     virtual 26 개 중 여기 나타나는 것만 구현했고, 나머지는 기본값을 쓴다.
 class nixlDocaMemosEngine : public nixlBackendEngine {
+    //nixl Backend Engine을 상속, SB API 구체적 구현 담당.
 public:
     nixlDocaMemosEngine(const nixlBackendInitParams *init_params);
     ~nixlDocaMemosEngine() override;

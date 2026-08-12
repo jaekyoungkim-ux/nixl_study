@@ -243,13 +243,13 @@ nixlDocaMemosEngine::parseInitParams(const nixl_b_params_t *params) {
 }
 
 // ============================================================================
-// ① initDocaDevice — ★ 여기서부터 읽을 것
+// ① initDocaDevice — ★ 여기서부터 읽을 것 //!!!!constructor 과정임!!!!
 // ============================================================================
 // ▶▶▶ 장치를 잡아 쓸 수 있게 만드는 전 과정.
 //     지금까지 이야기한 /dev/nvme0n1, NGUID, task pool 이 전부 여기서 만난다.
 //     순서에 의미가 있다: 경로 → 생성 → 경로 설정 → 별칭 획득 → NGUID → start → 능력 조회
-nixl_status_t
-nixlDocaMemosEngine::initDocaDevice() {
+nixl_status_t//반환 형식 : 0 -> 성공, 1 -> 진행 중, 음수 -> 실패
+nixlDocaMemosEngine::initDocaDevice() {//nixlDocaMemosEngine class : 본체. 
     // ▶ [1] 장치가 허용하는 최대 경로 길이를 먼저 물어본다. 하드코딩하지 않는다.
     uint32_t max_path_len = 0;
     doca_error_t result = doca_nvme_kernel_kvdev_cap_get_max_path_len(&max_path_len);
@@ -286,7 +286,8 @@ nixlDocaMemosEngine::initDocaDevice() {
         }
     }
 
-    // ▶ [3] 장치 객체 생성. 아직 어느 장치인지 모르는 빈 껍데기.
+    // ▶ [3] 장치 객체(장치를 다루기 위한 handler) 생성. 
+    // 아직 어느 장치인지 모르는 빈 껍데기.(NVMe controller Emulation 중인 Blufield에 연결될 예정)
     doca_nvme_kernel_kvdev *raw_nvme_kvdev = nullptr;
     result = doca_nvme_kernel_kvdev_create(&raw_nvme_kvdev);
     if (result != DOCA_SUCCESS) {
@@ -297,7 +298,7 @@ nixlDocaMemosEngine::initDocaDevice() {
     // ▶ 여기서 unique_ptr 로 옮겨 담는다. 이후 실패 경로는 cleanupDocaResources() 만 부르면 된다.
     nvmeKvdev_.reset(raw_nvme_kvdev);
 
-    // ▶ [4] "/dev/nvme0n1" 이 실제로 쓰이는 유일한 지점.
+    //만든 디바이스를 /dev/nvme0n1에 연결한다. (device_name이 /dev/nvme0n1임)
     result = doca_nvme_kernel_kvdev_set_path(nvmeKvdev_.get(), deviceName_.c_str());
     if (result != DOCA_SUCCESS) {
         NIXL_ERROR << "Failed to set NVMe kernel KV device path: " << doca_error_get_descr(result);
@@ -305,8 +306,7 @@ nixlDocaMemosEngine::initDocaDevice() {
         return NIXL_ERR_BACKEND;
     }
 
-    // ▶ [5] 같은 장치를 "일반 KV 장치" API 로 보는 별칭을 얻는다.
-    //   새 객체가 아니라 관점만 바꾼 것이라 별도 해제가 필요 없다.
+    
     kvdev_ = doca_nvme_kernel_kvdev_as_kvdev(nvmeKvdev_.get());
     if (!kvdev_) {
         NIXL_ERROR << "Failed to convert NVMe kernel KV device to generic KV device";
@@ -314,7 +314,7 @@ nixlDocaMemosEngine::initDocaDevice() {
         return NIXL_ERR_BACKEND;
     }
 
-    // ▶ [6] namespace 선택. start 이전에 설정해야 한다.
+    // ▶ [6] namespace 선택. 이미 장치 이름이 붙었는데 왜....??
     result = doca_kvdev_set_nguid(kvdev_, nguid_bytes);
     if (result != DOCA_SUCCESS) {
         NIXL_ERROR << "Failed to set DOCA KV device NGUID: " << doca_error_get_descr(result);
@@ -334,7 +334,7 @@ nixlDocaMemosEngine::initDocaDevice() {
 
     // ▶▶ [8] 여기부터 세 번의 "능력 조회". start 이후에만 물어볼 수 있다.
 
-    // ▶ 사용자가 준 num_tasks 를 장치 한계로 깎는다. 요청보다 작아질 수 있다.
+    //사용자가 제시한 동시 task 실행 수를, 장치가 실제로 할 수 있는 만큼으로 조정한다.
     uint32_t dev_max_tasks = 0;
     result = doca_kvdev_get_max_tasks(kvdev_, &dev_max_tasks);
     if (result != DOCA_SUCCESS) {
@@ -350,9 +350,8 @@ nixlDocaMemosEngine::initDocaDevice() {
     // Plugin stores keys inline in a fixed-size array sized to the current
     // DOCA spec (DOCA_MEMOS_MAX_OBJECT_KEY_LEN). If the device ever reports a
     // larger maximum, that capacity must be revisited.
-    // ▶▶ 헤더의 상수 16 이 장치 실제 능력과 맞는지 검증하는 지점.
-    //    장치가 16보다 큰 키를 지원한다고 하면 배열이 모자라므로 아예 거부한다.
-    //    (넘치는 게 아니라 "우리가 감당 못 함" 이라고 정직하게 실패)
+    // ▶▶ 이 플러그인은 16바이트 키를 사용. 
+    //        장치가 사용하는 키 길이가 16바이트보다 길다? -> 장치의 일부 영역에 접근하지 못한다는 뜻. -> 에러 반환 결정.
     uint16_t dev_max_key_len = 0;
     result = doca_kvdev_get_max_key_len(kvdev_, &dev_max_key_len);
     if (result != DOCA_SUCCESS) {
@@ -367,8 +366,9 @@ nixlDocaMemosEngine::initDocaDevice() {
         return NIXL_ERR_BACKEND;
     }
 
-    // ▶ 최대 값 길이. 나중에 trySubmitRequest 가 이 값으로 버퍼 크기를 검사한다.
-    //   발표의 "볼륨마다 최대 KV 블록 크기를 지정" 과 대응되는 것으로 보인다.
+    // CMX 쪽 BLUEFIELD에서 돌고 있는 DOCA MEMOS가, CMX의 SSD들을 미리 일정 크기의 볼륨으로 쪼개 두었다.
+    //why? -> 어짜피 특정 모델이 K,V저장을 위해 쓰는 블록의 크기는 일정. 그 블록이 들어갈 정도로 미리 쪼개둬도 됨.
+    //즉, hash(tokens) 키 하나당 최대 저장 가능한 value 크기는 볼륨 한 칸 크기. 그 한 칸 크기를 알아오는 것.
     result = doca_kvdev_get_max_value_len(kvdev_, &maxValueLen_);
     if (result != DOCA_SUCCESS) {
         NIXL_ERROR << "doca_kvdev_get_max_value_len failed: " << doca_error_get_descr(result);
@@ -537,30 +537,30 @@ nixlDocaMemosEngine::resolveMemosKey(uint64_t dev_id,
 //     KV 캐시는 새 키가 계속 생기므로 이 함수가 워크로드 내내 반복 호출되는데,
 //     장치 왕복이 없어서 값싸다. 이게 중요한 설계 선택이다.
 nixl_status_t
-nixlDocaMemosEngine::registerMem(const nixlBlobDesc &mem,
-                                 const nixl_mem_t &nixl_mem,
-                                 nixlBackendMD *&out) {
+nixlDocaMemosEngine::registerMem(const nixlBlobDesc &mem,//descriptor 하나(addr, len, devId, metaInfo(이걸로 키를 만듦))
+                                 const nixl_mem_t &nixl_mem,//memory type(OBJ or DRAM)
+                                 nixlBackendMD *&out) {//결과 출력 자리 
     auto supported_mems = getSupportedMems();
     if (std::find(supported_mems.begin(), supported_mems.end(), nixl_mem) == supported_mems.end()) {
         return NIXL_ERR_NOT_SUPPORTED;
     }
 
-    if (nixl_mem == OBJ_SEG) {
+    if (nixl_mem == OBJ_SEG) {//키 관련 registerMem이다.
         // ▶ 키를 확정해 상자에 담는다. 이 상자의 주소가 agent 로 넘어가 보관된다.
-        docaMemosKey key;
+        docaMemosKey key; //16바이트 키, 현재 keyLen =0
         if (!resolveMemosKey(mem.devId, mem.metaInfo, key)) {
             NIXL_ERROR << "Failed to convert metaInfo to docaMemosKey: " << mem.metaInfo;
             return NIXL_ERR_INVALID_PARAM;
-        }
+        }//resolveMemosKey()가, 재료를 가지고 키를 만든다. keylen은 재료의 길이(Byte)
+        //1. metainfo가 비어있다면 -> devId가 키가 된다. 
+        //2. metainfo가 hex수열이라면 -> metainfo를 두 글자씩 끊어 디코드.->이게 정상 
+        //3. metainfo가 문자열이라면 -> 글자를 그대로 바이트로 디코드.
 
         auto kv_md = std::make_unique<nixlDocaMemosMetadata>(nixl_mem, mem.devId, key);
-
+        //키를 보관하기 위한 상자를 만듦. 
         NIXL_DEBUG << "Registered OBJ_SEG memory with devId: " << mem.devId;
-        out = kv_md.release();   // ▶ 소유권을 호출자(agent)에게 넘긴다
-    } else {
-        // ▶▶ DRAM_SEG 는 상자를 만들지 않는다.
-        //    주소·길이는 전송 때 descriptor 에 실려 다시 오므로 저장할 필요가 없다.
-        //    (UCX 같은 백엔드는 여기서 페이지 고정 + 키 생성을 해야 해서 사정이 다르다)
+        out = kv_md.release();   // ▶ out = agent가 보관하는 key 상자의 주소
+    } else {//host DDR 주소, 크기는 어짜피 나중에 전송용 descriptor에 다시 실려 옴.
         out = nullptr;
     }
 
@@ -604,11 +604,11 @@ nixlDocaMemosEngine::queryMem(const nixl_reg_dlist_t &descs,
 // ▶▶▶ DOCA 를 부르지 않는다. 전송도 시작하지 않는다.
 //     하는 일: 검사 → 핸들 생성 → local 에서 iovec, remote 에서 키를 뽑아 배열에 저장.
 nixl_status_t
-nixlDocaMemosEngine::prepXfer(const nixl_xfer_op_t &operation,
-                              const nixl_meta_dlist_t &local,
-                              const nixl_meta_dlist_t &remote,
-                              const std::string &remote_agent,
-                              nixlBackendReqH *&handle,
+nixlDocaMemosEngine::prepXfer(const nixl_xfer_op_t &operation, //read or write
+                              const nixl_meta_dlist_t &local, //local descriptor list
+                              const nixl_meta_dlist_t &remote, //remote descriptor list
+                              const std::string &remote_agent, //상대 agent(여기선 자신)
+                              nixlBackendReqH *&handle, //결과 출력(handle 반환)
                               const nixl_opt_b_args_t *opt_args) const {
     if (!isValidPrepXferParams(operation, local, remote, remote_agent, localAgent)) {
         return NIXL_ERR_INVALID_PARAM;
@@ -627,7 +627,7 @@ nixlDocaMemosEngine::prepXfer(const nixl_xfer_op_t &operation,
         return NIXL_ERR_INVALID_PARAM;
     }
 
-    // ▶ 핸들 생성. totalTasks_ = descriptor 쌍 개수 = 앞으로 만들 DOCA task 장수.
+    // ▶ 핸들 생성. descriptor 몇개던 핸들 하나. descriptor 쌍 개수 = 앞으로 만들 DOCA task 장수. => 핸들 안의 totalTask_에 저장.
     auto req_h = std::make_unique<nixlDocaMemosBackendReqH>(desc_count);
     req_h->valueIovecs_.resize(desc_count);
     req_h->taskContexts_.resize(desc_count);
@@ -641,7 +641,7 @@ nixlDocaMemosEngine::prepXfer(const nixl_xfer_op_t &operation,
     for (int i = 0; i < desc_count; i++) {
         const auto &local_desc = local[i];
         req_h->valueIovecs_[i] = {reinterpret_cast<void *>(local_desc.addr), local_desc.len};
-    }
+    }//valueIovecs에 담기는 값은 local_des.addr과 완전 동일. 다만 DOCA가 iovec 포인터 형식 요구. 그래서 handle 내 공간에 iovec 형식으로 저장하고, 포인터 제공.
 
     req_h->objectKeys_.clear();
     req_h->objectKeys_.reserve(desc_count);
@@ -658,7 +658,7 @@ nixlDocaMemosEngine::prepXfer(const nixl_xfer_op_t &operation,
             return NIXL_ERR_INVALID_PARAM;   // ▶ req_h 는 unique_ptr 이라 자동 해제
         }
         req_h->objectKeys_.push_back(kv_md->objKey);   // ▶ 키를 값으로 복사해 둔다
-    }
+    }// remote descriptor에 있는 metadataP가 아까 agent에 저장해뒀던 key 주소임.
 
     handle = req_h.release();   // ▶ 소유권을 NIXL 코어로
 
@@ -678,9 +678,9 @@ nixlDocaMemosEngine::postXfer(const nixl_xfer_op_t &operation,
                               const nixl_meta_dlist_t &remote,
                               const std::string &remote_agent,
                               nixlBackendReqH *&handle,
+                              //prepXfer에서 만든 handle 그대로 다시 옴.
                               const nixl_opt_b_args_t *opt_args) const {
-    // ▶ prepXfer 가 만든 핸들이 그대로 돌아온다. 여기서 새로 만들지 않는다.
-    auto req_h = static_cast<nixlDocaMemosBackendReqH *>(handle);
+    auto req_h = static_cast<nixlDocaMemosBackendReqH *>(handle);//handle 형 DOCAMEMOS용으로 바꿈.
     if (!req_h) {
         return NIXL_ERR_INVALID_PARAM;
     }
@@ -689,8 +689,8 @@ nixlDocaMemosEngine::postXfer(const nixl_xfer_op_t &operation,
         NIXL_ERROR << "Unsupported operation type: " << operation;
         return NIXL_ERR_INVALID_PARAM;
     }
-
     return progressEngine_->postXfer(req_h, operation, local, remote);
+    //progressEngine 호출 -> post 실행
 }
 
 // ============================================================================
@@ -699,8 +699,8 @@ nixlDocaMemosEngine::postXfer(const nixl_xfer_op_t &operation,
 // ▶ 엔진이 카운터를 보고 답한다. no-thread 모드에서는 이 안에서 폴링까지 한다.
 nixl_status_t
 nixlDocaMemosEngine::checkXfer(nixlBackendReqH *handle) const {
-    auto req_h = static_cast<nixlDocaMemosBackendReqH *>(handle);
-    return progressEngine_->checkXfer(req_h);
+    auto req_h = static_cast<nixlDocaMemosBackendReqH *>(handle);//handle 형변환
+    return progressEngine_->checkXfer(req_h);//progressEngine 호출 -> check 진행
 }
 
 // ▶▶ 즉시 반환한다(block 하지 않는다). 진행 중인 task 가 있으면
@@ -708,13 +708,13 @@ nixlDocaMemosEngine::checkXfer(nixlBackendReqH *handle) const {
 //    가이드의 "releaseXferReq 는 non-blocking 이어야 한다" 규약을 지킨 방식.
 nixl_status_t
 nixlDocaMemosEngine::releaseReqH(nixlBackendReqH *handle) const {
-    auto req_h = static_cast<nixlDocaMemosBackendReqH *>(handle);
+    auto req_h = static_cast<nixlDocaMemosBackendReqH *>(handle);//handle 형변환
     if (!req_h) {
         return NIXL_ERR_INVALID_PARAM;
     }
 
     NIXL_DEBUG << "Releasing request handle with " << req_h->totalTasks_ << " tasks";
 
-    progressEngine_->cancelRequest(req_h);
+    progressEngine_->cancelRequest(req_h);//progressEngine 호출 -> release 호출
     return NIXL_SUCCESS;
 }
