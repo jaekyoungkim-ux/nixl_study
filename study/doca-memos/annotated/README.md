@@ -60,16 +60,51 @@ PR #1717의 소스에 한글 주석을 단 사본. **코드 자체는 원본 그
 ⑤ nixlThreaded*        더블버퍼 큐. 마지막에
 ```
 
-## 플러그인 전체를 다 읽은 뒤 남는 것
+## 목 레이어 — `mocks.{h,cpp}`
+
+원본은 `test/unit/plugins/doca_memos/` 아래에 있다.
+
+| 파일 | 원본 행수 | 무엇 |
+|---|---|---|
+| `doca_memos_mocks.h` | 204 | 가짜 장치의 자료구조 + 에러 주입 손잡이 |
+| `doca_memos_mocks.cpp` | 771 | 그 구현 |
+
+**DOCA 4.4 가 비공개인 지금 `doca_kvdev` API 의 모양을 읽을 수 있는 사실상 유일한 근거다.**
+다만 **시그니처는 진짜 헤더에서 오므로 믿을 수 있으나, 동작은 저자가 만든 모델**이다.
+실제 장치 명세가 아니라 "플러그인이 장치에게 기대하는 것" 으로 읽어야 한다.
+
+읽을 곳은 사실상 두 군데뿐이다:
 
 ```
-test/unit/plugins/doca_memos/doca_memos_mocks.cpp    771줄  ← 가짜 KV 장치
-test/unit/plugins/doca_memos/doca_memos_backend_test.cpp  1,850줄  TEST_F 44개
+alloc_typed_task()   에러 주입이 걸리는 지점
+doca_pe_progress()   ★ 가짜 장치가 실제로 일하는 유일한 곳
+                       STORE    → kv_store[key] 에 복사
+                       RETRIEVE → kv_store 에서 꺼내 buffer 로
+                       EXIST    → 있으면 ALREADY_EXIST, 없으면 NOT_FOUND
+                                  어느 쪽이든 **에러 콜백** 으로
 ```
 
-목 레이어는 **비공개 `doca_kvdev` API 의 사실상 유일한 명세**다.
-progress_engine 을 읽을 때 DOCA 함수가 나오면 `mocks.cpp` 에서 그 함수를 찾아보면
-"이 호출이 실제로 무엇을 하는가"가 그 자리에서 풀린다.
+나머지는 대부분 getter/setter 보일러플레이트다.
+
+**progress_engine 을 읽을 때 옆에 두고 쓰는 것을 권한다.** DOCA 함수가 나오면
+`mocks.cpp` 에서 그 함수를 찾아보면 "이 호출이 실제로 무엇을 하는가"가 그 자리에서 풀린다.
+
+### 목이 드러낸 것 둘
+
+- `set_key_value_conf` 가 **iovec 배열과 개수**를 받는다 → API 는 scatter-gather 를
+  지원하는데 플러그인이 `1` 로 고정하고 있다
+- `set_do_not_overwrite` / `set_must_exist` 가 존재한다 → **조건부 쓰기 옵션이 있으나
+  플러그인이 쓰지 않는다.** 실제 API 표면이 플러그인이 쓰는 범위보다 넓다
+
+## 아직 주석 안 단 것
+
+```
+doca_{compat,ctx,error,pe,types}.h    ~430줄  DOCA Core 헤더 스텁 (기계적)
+doca_memos_backend_test.cpp          1,850줄  TEST_F 44개
+```
+
+스텁 헤더들은 상수와 타입 정의뿐이라 주석할 것이 없다.
+`doca_kvdev.h` 는 스텁이 없다 — **진짜 SDK 를 요구하므로 현재 빌드·테스트가 불가능한 원인.**
 
 ---
 
