@@ -84,6 +84,90 @@ constructor 는 네 단계를 순서대로 밟는다. 어느 단계든 실패하
 
 ---
 
+## 2-1. `createProgressEngine()` — 두 파일이 만나는 이음매
+
+constructor 의 마지막 단계. `initDocaDevice()` 가 **장치를 잡았다면**, 이것은
+**그 장치를 굴릴 기계를 세운다.** 여기서부터 `doca_memos_progress_engine.cpp` 로 넘어간다.
+
+### progress engine 이 무엇인가 — 이름이 오해를 부른다
+
+"progress" 는 **전송을 진행시킨다**는 뜻이고, 여기엔 두 방향이 다 들어간다.
+
+```
+제출       요청을 DOCA task 로 만들어 넣는다
+완료 수거   doca_pe_progress() 로 끝난 것을 거둬 카운터를 올린다
+```
+
+**둘 다 progress 다.** 완료 처리 전담 기계가 아니다.
+
+특히 **DOCA task 를 조립하는 코드가 여기 있다** — `backend.cpp` 에는 task 를 만드는
+줄이 하나도 없다. `prepXfer()` 는 재료(iovec 배열 + key 배열)만 모으고,
+실제 조립·제출은 progress engine 의 `trySubmitRequest()` 가 한다.
+
+> 같은 단어가 두 층에 있다. `doca_pe` 는 DOCA 의 객체로 완료를 거두는 것이고,
+> `nixlDocaMemosProgressEngine` 은 그것을 **포함해서** IO 컨텍스트·제출 로직·재시도·취소를
+> 전부 묶은 플러그인의 클래스다.
+
+### 하는 일 — 둘 중 하나를 만든다
+
+```
+init_params->enableProgTh 가
+     true  →  nixlThreadedProgressEngine
+     false →  nixlNoThreadProgressEngine
+```
+
+넘겨주는 값 세 개가 전부 `initDocaDevice()` 가 확정한 것이다. **constructor 에서
+③이 ④보다 먼저여야 하는 이유가 여기서 드러난다.**
+
+| 넘기는 값 | 출처 | progress engine 에서의 쓰임 |
+|---|---|---|
+| `nvmeKvdev_` | [3]~[7] | IO 컨텍스트 생성 |
+| `numTasks_` | [8a] (장치 한계로 깎인 값) | task pool 크기 |
+| `maxValueLen_` | [8c] (볼륨 블록 크기) | 제출 시 버퍼 크기 검사 |
+
+threaded 쪽만 `pthrDelay` 를 하나 더 받는다. 0 이면 "busy-spin 한다" 는 경고가 뜨고,
+progress thread 가 condvar 로 자지 않고 계속 돈다.
+
+### `enableProgTh` 의 출처가 다르다
+
+플러그인 파라미터가 아니다.
+
+```
+agent 생성 시 설정      →  init_params->enableProgTh
+createBackend 파라미터   →  init_params->customParams   (device_name 등)
+```
+
+**agent 를 만들 때 정해지고 그 agent 의 모든 백엔드가 공유한다.** 이 백엔드만 따로 정할 수 없다.
+
+### 두 엔진의 차이 — 완료 처리만이 아니다
+
+| | 무스레드형 | 스레드형 |
+|---|---|---|
+| DOCA 를 부르는 스레드 | 여럿 (호출자들) | **progress thread 하나뿐** |
+| 제출 주체·시점 | 호출자가 `postXfer()` 안에서 **즉시** | progress thread 가 **나중에** |
+| `postXfer()` 반환 시점 | 이미 제출 끝남 | **아직 제출 전** |
+| dlist 복사 | 불필요 | **통째로 복사** (제출이 나중이라) |
+| `checkXfer()` | **폴링 + 재시도 후** 카운터 확인 | 카운터만 읽음 |
+| 동기화 | mutex 하나로 전부 직렬화 | DOCA 경로엔 락 없음, 큐만 짧게 |
+
+**무스레드형은 `checkXfer()` 를 부르지 않으면 전송이 영원히 끝나지 않는다.**
+장치가 일을 마쳐도 완료를 거둬올 사람이 없기 때문이다.
+
+무엇이 같은지도 분명하다 — **task 를 조립하는 방법**은 베이스 클래스의
+`trySubmitRequest()` 하나를 둘이 공유한다. 다른 것은 **누가 언제 그것을 부르는가** 다.
+
+### 에러 처리가 두 겹인 이유
+
+```
+① try / catch          std::thread 생성 실패 같은 예외
+② hasInitError() 확인   DOCA 자원 생성 실패
+```
+
+progress engine 의 생성자는 DOCA 실패에 **예외를 던지지 않고 플래그만 세운다.**
+그래서 만든 뒤 따로 물어봐야 한다. 반면 `std::thread` 생성은 진짜 예외를 던진다.
+
+---
+
 ## 3. 등록 — key 가 확정되는 시점
 
 여기서부터 descriptor 가 등장하는데, **두 종류**임을 먼저 구분해야 한다.
@@ -172,6 +256,10 @@ checkXfer     "                        → progressEngine_->checkXfer()
 releaseReqH   "                        → progressEngine_->cancelRequest()
 ```
 
+세 함수가 세 줄로 끝나는 이유는 2-1 에 있다. 두 엔진이 같은 이름의 함수들을 갖고 있어,
+`progressEngine_->postXfer(...)` 한 줄이 담긴 쪽에 따라 다르게 동작한다.
+**부르는 코드는 어느 엔진이 담겼는지 알 필요가 없다.**
+
 형변환이 필요한 이유: NIXL 코어는 백엔드별 핸들 타입을 모르므로 공통 조상 타입으로만
 다룬다. 돌아온 것을 원래 타입으로 되돌려야 한다.
 
@@ -197,6 +285,7 @@ releaseReqH   "                        → progressEngine_->cancelRequest()
   노드에 NVMe 가 여럿이면 어느 것이 CMX 백엔드인지 **배포하는 사람이 알아야 한다.**
 - **DOCA 실작업은 `initDocaDevice()` 하나뿐**이다. 579줄 중 나머지는
   문자열 다루기, key 확정, 재료 모으기, 위임이다.
+  **DOCA task 를 조립하는 코드조차 이 파일에 없다** — progress engine 에 있다.
 - **`registerMem` 과 `prepXfer` 에 DOCA 호출이 없다.** KV 캐시처럼 key 가 계속
   바뀌는 워크로드에서 장치 왕복을 만들지 않으려는 설계로 보인다.
 - 가이드의 OBJ descriptor 표와 두 곳이 어긋난다 — remote 의 `addr`/`len` 을 읽지 않고

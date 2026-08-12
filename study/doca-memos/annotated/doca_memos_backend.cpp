@@ -383,7 +383,7 @@ nixlDocaMemosEngine::initDocaDevice() {//nixlDocaMemosEngine class : 본체.
 // ▶▶ enableProgTh(agent 생성 시 설정)에 따라 두 엔진 중 하나를 만든다.
 //    이 선택이 이후 postXfer / checkXfer 의 동작을 완전히 바꾼다.
 nixl_status_t
-nixlDocaMemosEngine::createProgressEngine(const nixlBackendInitParams *init_params) {
+nixlDocaMemosEngine::createProgressEngine(const nixlBackendInitParams *init_params) {//장치를 굴릴 실제 엔진 제작
     try {
         if (init_params->enableProgTh) {
             if (init_params->pthrDelay == 0) {
@@ -391,14 +391,16 @@ nixlDocaMemosEngine::createProgressEngine(const nixlBackendInitParams *init_para
             }
             // ▶ 전용 스레드가 DOCA API 의 유일한 호출자가 된다. 호출자 쪽은 사실상 lock-free.
             progressEngine_ = std::make_unique<nixlThreadedProgressEngine>(
-                nvmeKvdev_.get(),
-                numTasks_,
-                maxValueLen_,
+                nvmeKvdev_.get(),//장치 파일
+                numTasks_,//한번에 처리 가능한 TASK 수
+                maxValueLen_,//장치 볼륨 블록 크기
                 std::chrono::microseconds(init_params->pthrDelay));
         } else {
             // ▶ 스레드 없음. checkXfer() 를 부르는 호출자가 직접 진행시킨다.
             progressEngine_ = std::make_unique<nixlNoThreadProgressEngine>(
-                nvmeKvdev_.get(), numTasks_, maxValueLen_);
+                nvmeKvdev_.get(), 
+                numTasks_, 
+                maxValueLen_);
         }
     }
     catch (const std::exception &e) {
