@@ -199,7 +199,7 @@ nixlDocaMemosProgressEngine::taskErrorCallback(struct doca_task *task,
 }
 
 
-// ▶▶ 베이스 생성자. initDocaDevice() 와 같은 패턴이다 — 만들고 → 설정하고 → 켠다.
+// ▶▶ !!constructor!! 베이스 생성자. initDocaDevice() 와 같은 패턴이다 — 만들고 → 설정하고 → 켠다.
 //
 //      pe 생성 → IO 컨텍스트 생성 → 일반 IO 별칭 → task 수 설정
 //      → 콜백 2개 등록 → ctx 별칭 → pe 에 ctx 연결 → ctx start
@@ -212,14 +212,14 @@ nixlDocaMemosProgressEngine::nixlDocaMemosProgressEngine(struct doca_nvme_kernel
     : maxValueLen_(max_value_len) {
     doca_error_t result;
 
-    result = doca_pe_create(&pe_);
+    result = doca_pe_create(&pe_);//progress engine 생성, 장치와의 소통 담당
     if (result != DOCA_SUCCESS) {
         NIXL_ERROR << "Failed to create DOCA progress engine: " << doca_error_get_descr(result);
         initErr_ = true;
         return;
     }
 
-    result = doca_nvme_kernel_kvdev_io_create(nvme_kvdev, &kkvIo_);
+    result = doca_nvme_kernel_kvdev_io_create(nvme_kvdev, &kkvIo_);//장치에 명령 넣는 큐(kkvIo) 생성 
     if (result != DOCA_SUCCESS) {
         NIXL_ERROR << "Failed to create DOCA NVMe kernel KV IO context: "
                    << doca_error_get_descr(result);
@@ -228,7 +228,7 @@ nixlDocaMemosProgressEngine::nixlDocaMemosProgressEngine(struct doca_nvme_kernel
         return;
     }
 
-    kvIo_ = doca_nvme_kernel_kvdev_io_as_kvdev_io(kkvIo_);
+    kvIo_ = doca_nvme_kernel_kvdev_io_as_kvdev_io(kkvIo_);//kkvIo형변환
     if (!kvIo_) {
         NIXL_ERROR << "Failed to convert NVMe kernel KV IO context to generic KV IO context";
         cleanupDocaResources();
@@ -236,7 +236,7 @@ nixlDocaMemosProgressEngine::nixlDocaMemosProgressEngine(struct doca_nvme_kernel
         return;
     }
 
-    result = doca_kvdev_io_set_num_tasks(kvIo_, num_tasks);
+    result = doca_kvdev_io_set_num_tasks(kvIo_, num_tasks);//큐가 동시에 담을 수 있는 task수(장치가 정한 것)
     if (result != DOCA_SUCCESS) {
         NIXL_ERROR << "Failed to set DOCA KV IO task count: " << doca_error_get_descr(result);
         cleanupDocaResources();
@@ -244,7 +244,7 @@ nixlDocaMemosProgressEngine::nixlDocaMemosProgressEngine(struct doca_nvme_kernel
         return;
     }
 
-    result = doca_kvdev_io_set_task_completion_cb(kvIo_, taskCompletionCallback);
+    result = doca_kvdev_io_set_task_completion_cb(kvIo_, taskCompletionCallback);//성공시 이 함수 불러라
     if (result != DOCA_SUCCESS) {
         NIXL_ERROR << "Failed to set DOCA KV IO completion callback: "
                    << doca_error_get_descr(result);
@@ -253,7 +253,7 @@ nixlDocaMemosProgressEngine::nixlDocaMemosProgressEngine(struct doca_nvme_kernel
         return;
     }
 
-    result = doca_kvdev_io_set_task_error_cb(kvIo_, taskErrorCallback);
+    result = doca_kvdev_io_set_task_error_cb(kvIo_, taskErrorCallback);//실패시 이 함수 불러라
     if (result != DOCA_SUCCESS) {
         NIXL_ERROR << "Failed to set DOCA KV IO error callback: " << doca_error_get_descr(result);
         cleanupDocaResources();
@@ -261,7 +261,7 @@ nixlDocaMemosProgressEngine::nixlDocaMemosProgressEngine(struct doca_nvme_kernel
         return;
     }
 
-    ctx_ = doca_kvdev_io_as_ctx(kvIo_);
+    ctx_ = doca_kvdev_io_as_ctx(kvIo_);//kvIo 형변환
     if (!ctx_) {
         NIXL_ERROR << "Failed to convert KV IO context to DOCA context";
         cleanupDocaResources();
@@ -269,7 +269,7 @@ nixlDocaMemosProgressEngine::nixlDocaMemosProgressEngine(struct doca_nvme_kernel
         return;
     }
 
-    result = doca_pe_connect_ctx(pe_, ctx_);
+    result = doca_pe_connect_ctx(pe_, ctx_);//pe_가 ctx_(kkvIO형변환된 것)를 감시하도록 함.
     if (result != DOCA_SUCCESS) {
         NIXL_ERROR << "Failed to connect context to progress engine: "
                    << doca_error_get_descr(result);
@@ -278,7 +278,7 @@ nixlDocaMemosProgressEngine::nixlDocaMemosProgressEngine(struct doca_nvme_kernel
         return;
     }
 
-    result = doca_ctx_start(ctx_);
+    result = doca_ctx_start(ctx_);//큐 가동.
     if (result != DOCA_SUCCESS) {
         NIXL_ERROR << "Failed to start DOCA context: " << doca_error_get_descr(result);
         cleanupDocaResources();
@@ -336,7 +336,7 @@ nixlDocaMemosProgressEngine::checkXfer(nixlDocaMemosBackendReqH *req_h) const {
 
 bool
 
-// ▶▶▶ 이 플러그인에서 가장 중요한 함수. 실제 NVMe KV 명령이 조립되는 곳이다.
+// ▶▶▶ 이 플러그인에서 가장 중요한 함수. descriptor 쌍을 task들로 바꿔 제출한다.
 //
 //     descriptor 쌍 하나 → DOCA task 한 장. 인덱스 i 로 양쪽을 함께 쓴다.
 //        objectKeys_[i]   ← remote[i] 에서 온 16바이트 key
@@ -359,35 +359,35 @@ nixlDocaMemosProgressEngine::trySubmitRequest(nixlDocaMemosBackendReqH *req_h,
     }
 
     for (int i = req_h->nextDescriptorIndex_; i < local.descCount(); i++) {
-        const docaMemosKey &object_key = req_h->objectKeys_[i];
+        const docaMemosKey &object_key = req_h->objectKeys_[i];//원하는 key 주소(backend에서 옴)
 
-        auto *task_ctx = &req_h->taskContexts_[i];
-        task_ctx->reqH = req_h;
-        task_ctx->taskIndex = i;
-        task_ctx->isRetrieve = (operation == NIXL_READ);
-        task_ctx->expectedValueLen = req_h->valueIovecs_[i].iov_len;
-        union doca_data task_user_data = {.ptr = task_ctx};
+        auto *task_ctx = &req_h->taskContexts_[i];//뭐였지
+        task_ctx->reqH = req_h;//어느 요청의
+        task_ctx->taskIndex = i;//몇번째 discriptor
+        task_ctx->isRetrieve = (operation == NIXL_READ);//읽기 ? 쓰기 ?
+        task_ctx->expectedValueLen = req_h->valueIovecs_[i].iov_len;//예상 길이 -> 나중에 읽어온 값 길이가 다르면 경고.
+        union doca_data task_user_data = {.ptr = task_ctx};//DOCA에게 pointer로 전달..?
 
         struct doca_task *doca_task = nullptr;
         doca_error_t result;
 
         const size_t iov_len = req_h->valueIovecs_[i].iov_len;
-        if (iov_len > UINT32_MAX) {
+        if (iov_len > UINT32_MAX) {//요청 데이터 크기가 DOCA 한계 초과
             NIXL_ERROR << "Buffer length " << iov_len << " exceeds DOCA KV max (UINT32_MAX)";
             handleSubmissionFailure(req_h, NIXL_ERR_INVALID_PARAM);
             return true;
         }
         const uint32_t value_len = static_cast<uint32_t>(iov_len);
-        if (maxValueLen_ > 0 && value_len > maxValueLen_) {
+        if (maxValueLen_ > 0 && value_len > maxValueLen_) {//요청 데이터 크기가 볼륨 크기 초과
             NIXL_ERROR << "Buffer length " << value_len << " exceeds device max value length "
                        << maxValueLen_;
             handleSubmissionFailure(req_h, NIXL_ERR_INVALID_PARAM);
             return true;
         }
 
-        if (operation == NIXL_WRITE) {
+        if (operation == NIXL_WRITE) {//STORE 명령 제작 단계
             struct doca_kvdev_io_task_store *store_task = nullptr;
-            result = doca_kvdev_io_task_store_alloc_init(kvIo_, task_user_data, &store_task);
+            result = doca_kvdev_io_task_store_alloc_init(kvIo_, task_user_data, &store_task);//빈 명령서 형식 하나 가져와서 우리 task에 할당.
             if (result != DOCA_SUCCESS) {
                 if (result == DOCA_ERROR_FULL || result == DOCA_ERROR_NO_MEMORY) {
                     req_h->nextDescriptorIndex_ = i;
@@ -401,13 +401,13 @@ nixlDocaMemosProgressEngine::trySubmitRequest(nixlDocaMemosBackendReqH *req_h,
                 return true;
             }
             doca_kvdev_io_task_store_set_key_value_conf(store_task,
-                                                        object_key.key,
-                                                        object_key.keyLen,
-                                                        &req_h->valueIovecs_[i],
-                                                        1,
-                                                        value_len);
-            doca_task = doca_kvdev_io_task_store_as_task(store_task);
-        } else { // NIXL_READ
+                                                        object_key.key,//키 주소
+                                                        object_key.keyLen,//키 길이
+                                                        &req_h->valueIovecs_[i],//벨류
+                                                        1,//조각 개수(1이라는 것은 벨류 하나가 메모리 상에서 연속적이어야 한다는 뜻)
+                                                        value_len);//벨류 길이
+            doca_task = doca_kvdev_io_task_store_as_task(store_task);//task 형 변환
+        } else { //RETRIEVE 명령 제작 단계
             struct doca_kvdev_io_task_retrieve *retrieve_task = nullptr;
             result = doca_kvdev_io_task_retrieve_alloc_init(kvIo_, task_user_data, &retrieve_task);
             if (result != DOCA_SUCCESS) {
@@ -434,7 +434,7 @@ nixlDocaMemosProgressEngine::trySubmitRequest(nixlDocaMemosBackendReqH *req_h,
         // Bump submittedTasks_ only after a successful submit, so the count
         // stays authoritative even if doca_task_submit invokes the callback
         // synchronously on failure.
-        result = doca_task_submit(doca_task);
+        result = doca_task_submit(doca_task);//                 명령 제출
         if (result != DOCA_SUCCESS) {
             if (result == DOCA_ERROR_FULL) {
                 doca_task_free(doca_task);
