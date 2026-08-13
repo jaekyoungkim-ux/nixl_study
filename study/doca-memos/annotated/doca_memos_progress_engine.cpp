@@ -796,9 +796,9 @@ nixlThreadedProgressEngine::postXfer(nixlDocaMemosBackendReqH *req_h,
                                  operation,
                                  std::make_unique<nixl_meta_dlist_t>(local),
                                  std::make_unique<nixl_meta_dlist_t>(remote)});
-        hasNewWork_.store(true, std::memory_order_release);
+        hasNewWork_.store(true, std::memory_order_release);// 처리할 명령 있다고 스레드에게 알림
     }
-    wakeup_.notify_one();
+    wakeup_.notify_one();//스레드 깨움
 
     return NIXL_IN_PROG;
 }
@@ -1002,13 +1002,13 @@ nixlThreadedProgressEngine::progressThreadFunc() {
     NIXL_INFO << "Progress thread running";
 
     while (!threadStop_.load(std::memory_order_acquire)) {
-        bool made_progress = false;
+        bool made_progress = false;//뭐라도 했나 안했다 표시 -> 안했으면 스레드 비활성화(다시 깨울 때까지)
 
         if (pe_) {
             for (int n = 0; n < kProgressBurst && doca_pe_progress(pe_) != 0; n++) {
                 made_progress = true;
             }
-        }
+        }//완료 가져오기
 
         for (auto it = pendingDeletes_.begin(); it != pendingDeletes_.end();) {
             if ((*it)->allTasksCompleted_.load(std::memory_order_acquire)) {
@@ -1018,7 +1018,7 @@ nixlThreadedProgressEngine::progressThreadFunc() {
             } else {
                 ++it;
             }
-        }
+        }//취소된 명령 회수
 
         while (!pendingRequests_.empty()) {
             auto *req_h = pendingRequests_.front();
