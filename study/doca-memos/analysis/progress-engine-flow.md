@@ -340,4 +340,6 @@ query 헬퍼 3개는 NoThread 블록 한가운데(512), `trySubmitExistTask` 는
 
 ---
 
-관련: [README.md](./README.md) · [backend-flow.md](./backend-flow.md) · [request-flow.md](./request-flow.md) · [adoption-report.md](./adoption-report.md) · [../annotated/](../annotated/)
+task 한 장에 무엇이 언제 들어가는지는 [doca-task-anatomy.md](./doca-task-anatomy.md) 참조.
+
+관련: [README.md](./README.md) · [backend-flow.md](./backend-flow.md) · [request-flow.md](./request-flow.md) · [doca-task-anatomy.md](./doca-task-anatomy.md) · [adoption-report.md](./adoption-report.md) · [../annotated/](../annotated/)
