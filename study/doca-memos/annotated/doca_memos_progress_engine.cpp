@@ -834,7 +834,7 @@ nixlThreadedProgressEngine::cancelRequest(nixlDocaMemosBackendReqH *req_h) const
 }
 
 
-// ▶ 베이스 초기화가 성공했을 때만 스레드를 띄운다.
+// ▶ !!스레드형 constructor!! 베이스 초기화가 성공했을 때만 스레드를 띄운다.
 nixlThreadedProgressEngine::nixlThreadedProgressEngine(struct doca_nvme_kernel_kvdev *nvme_kvdev,
                                                        uint32_t num_tasks,
                                                        uint32_t max_value_len,
@@ -849,7 +849,7 @@ nixlThreadedProgressEngine::nixlThreadedProgressEngine(struct doca_nvme_kernel_k
 
     // std::thread's constructor throws std::system_error on pthread_create
     // failure; nothing else to check.
-    progressThread_ = std::thread(&nixlThreadedProgressEngine::progressThreadFunc, this);
+    progressThread_ = std::thread(&nixlThreadedProgressEngine::progressThreadFunc, this);//스레드 생성
 }
 
 
