@@ -38,10 +38,10 @@
 
 // DOCA includes
 #include <doca_pe.h>
-#include <doca_kvdev.h>
-#include <doca_kvdev_io.h>
-#include <doca_nvme_kernel_kvdev.h>
-#include <doca_nvme_kernel_kvdev_io.h>
+#include <doca_kvdev.h>//libdoca_kv
+#include <doca_kvdev_io.h>//libdoca_kv
+#include <doca_nvme_kernel_kvdev.h>//libdoca_kv
+#include <doca_nvme_kernel_kvdev_io.h>//libdoca_kv
 #include <doca_ctx.h>
 #include <doca_error.h>
 
@@ -236,7 +236,7 @@ nixlDocaMemosProgressEngine::nixlDocaMemosProgressEngine(struct doca_nvme_kernel
         return;
     }
 
-    result = doca_kvdev_io_set_num_tasks(kvIo_, num_tasks);//큐가 동시에 담을 수 있는 task수(장치가 정한 것)
+    result = doca_kvdev_io_set_num_tasks(kvIo_, num_tasks);//큐에 확보할 명령서 수. 기본 8192, 사용자 지정 가능, 장치 상한으로 깎임
     if (result != DOCA_SUCCESS) {
         NIXL_ERROR << "Failed to set DOCA KV IO task count: " << doca_error_get_descr(result);
         cleanupDocaResources();
@@ -372,20 +372,20 @@ nixlDocaMemosProgressEngine::trySubmitRequest(nixlDocaMemosBackendReqH *req_h,
         doca_error_t result;
 
         const size_t iov_len = req_h->valueIovecs_[i].iov_len;
-        if (iov_len > UINT32_MAX) {//요청 데이터 크기가 DOCA 한계 초과
+        if (iov_len > UINT32_MAX) {//예상 데이터 크기가 DOCA 한계 초과
             NIXL_ERROR << "Buffer length " << iov_len << " exceeds DOCA KV max (UINT32_MAX)";
             handleSubmissionFailure(req_h, NIXL_ERR_INVALID_PARAM);
             return true;
         }
         const uint32_t value_len = static_cast<uint32_t>(iov_len);
-        if (maxValueLen_ > 0 && value_len > maxValueLen_) {//요청 데이터 크기가 볼륨 크기 초과
+        if (maxValueLen_ > 0 && value_len > maxValueLen_) {//예상 데이터 크기가 볼륨 크기 초과
             NIXL_ERROR << "Buffer length " << value_len << " exceeds device max value length "
                        << maxValueLen_;
             handleSubmissionFailure(req_h, NIXL_ERR_INVALID_PARAM);
             return true;
         }
 
-        if (operation == NIXL_WRITE) {//STORE 명령 제작 단계
+        if (operation == NIXL_WRITE) {//STORE 명령 제작 단계(빈 명령서 가져와서 채우기)
             struct doca_kvdev_io_task_store *store_task = nullptr;
             result = doca_kvdev_io_task_store_alloc_init(kvIo_, task_user_data, &store_task);//빈 명령서 형식 하나 가져와서 우리 task에 할당.
             if (result != DOCA_SUCCESS) {
@@ -403,11 +403,11 @@ nixlDocaMemosProgressEngine::trySubmitRequest(nixlDocaMemosBackendReqH *req_h,
             doca_kvdev_io_task_store_set_key_value_conf(store_task,
                                                         object_key.key,//키 주소
                                                         object_key.keyLen,//키 길이
-                                                        &req_h->valueIovecs_[i],//벨류
+                                                        &req_h->valueIovecs_[i],//host DDR의 가상 주소
                                                         1,//조각 개수(1이라는 것은 벨류 하나가 메모리 상에서 연속적이어야 한다는 뜻)
-                                                        value_len);//벨류 길이
+                                                        value_len);//host DDR의 길이
             doca_task = doca_kvdev_io_task_store_as_task(store_task);//task 형 변환
-        } else { //RETRIEVE 명령 제작 단계
+        } else { //RETRIEVE 명령 제작 단계(빈 명령서 가져와서 채우기)
             struct doca_kvdev_io_task_retrieve *retrieve_task = nullptr;
             result = doca_kvdev_io_task_retrieve_alloc_init(kvIo_, task_user_data, &retrieve_task);
             if (result != DOCA_SUCCESS) {
@@ -434,7 +434,7 @@ nixlDocaMemosProgressEngine::trySubmitRequest(nixlDocaMemosBackendReqH *req_h,
         // Bump submittedTasks_ only after a successful submit, so the count
         // stays authoritative even if doca_task_submit invokes the callback
         // synchronously on failure.
-        result = doca_task_submit(doca_task);//                 명령 제출
+        result = doca_task_submit(doca_task);//                 채워진 명령서 가져가라 신호 queue에 발사 ->이후는 알 수 없음
         if (result != DOCA_SUCCESS) {
             if (result == DOCA_ERROR_FULL) {
                 doca_task_free(doca_task);
@@ -459,24 +459,23 @@ nixl_status_t
 // ▶▶ 무스레드형 제출. 엔진 mutex 를 잡고 그 자리에서 제출한다.
 //    카운터를 여기서 리셋하는 이유는 "prep 1회 / post 다회" 규약 때문 —
 //    같은 핸들이 다시 post 될 수 있다.
-nixlNoThreadProgressEngine::postXfer(nixlDocaMemosBackendReqH *req_h,
-                                     const nixl_xfer_op_t &operation,
-                                     const nixl_meta_dlist_t &local,
-                                     const nixl_meta_dlist_t &remote) const {
-    const std::lock_guard<std::mutex> guard(lock_);
+nixlNoThreadProgressEngine::postXfer(nixlDocaMemosBackendReqH *req_h, // 핸들
+                                     const nixl_xfer_op_t &operation, // read/write
+                                     const nixl_meta_dlist_t &local, // local descriptors
+                                     const nixl_meta_dlist_t &remote) const {// remote descriptors
+    const std::lock_guard<std::mutex> guard(lock_); //mutex lock -> critical section start
 
-    req_h->totalTasks_ = local.descCount();
-    req_h->submittedTasks_ = 0;
-    req_h->completedTasks_ = 0;
-    req_h->nextDescriptorIndex_ = 0;
-    req_h->allTasksCompleted_.store(false, std::memory_order_release);
-    req_h->overallStatus_ = NIXL_IN_PROG;
+    req_h->totalTasks_ = local.descCount(); // 이 요청의 descriptor(task) 수
+    req_h->submittedTasks_ = 0;       //초
+    req_h->completedTasks_ = 0;       //기
+    req_h->nextDescriptorIndex_ = 0;  //화
+    req_h->allTasksCompleted_.store(false, std::memory_order_release); //완료 신호 초기화
+    req_h->overallStatus_ = NIXL_IN_PROG; //상태 : 진행 중
 
     NIXL_DEBUG << "Posting transfer with " << req_h->totalTasks_ << " tasks";
+    bool fully_submitted = trySubmitRequest(req_h, operation, local, remote); //submit
 
-    bool fully_submitted = trySubmitRequest(req_h, operation, local, remote);
-
-    if (!fully_submitted) {
+    if (!fully_submitted) {//descriptor 다 안 들어갔으면 나중에 이어서 제출
         req_h->storedOperation_ = operation;
         req_h->storedLocal_ = std::make_unique<nixl_meta_dlist_t>(local);
         req_h->storedRemote_ = std::make_unique<nixl_meta_dlist_t>(remote);
@@ -496,7 +495,7 @@ nixlNoThreadProgressEngine::postXfer(nixlDocaMemosBackendReqH *req_h,
     }
 
     NIXL_DEBUG << "Transfer posted (" << req_h->submittedTasks_ << " tasks submitted)";
-    return NIXL_IN_PROG;
+    return NIXL_IN_PROG;//descriptor가 모두 제출되지 않았어도, in progress 반환됨.
 }
 
 void
@@ -561,9 +560,9 @@ nixlNoThreadProgressEngine::progress() const {
         return 0;
     }
     int ret = 0;
-    while (ret < kProgressBurst && doca_pe_progress(pe_) != 0) {
+    while (ret < kProgressBurst && doca_pe_progress(pe_) != 0) {//한 번에 최대 64개 회수
         ret++;
-    }
+    }//완료된 요청 회수
 
     for (auto it = cancelledRequests_.begin(); it != cancelledRequests_.end();) {
         if ((*it)->allTasksCompleted_.load(std::memory_order_acquire)) {
@@ -572,7 +571,7 @@ nixlNoThreadProgressEngine::progress() const {
         } else {
             ++it;
         }
-    }
+    }//취소된 요청 회수
 
     return ret;
 }
@@ -669,6 +668,7 @@ nixlDocaMemosProgressEngine::collectQueryResults(
     return successful_queries;
 }
 
+//무스레드형 엔진 constructor - 뭐 없음.
 nixlNoThreadProgressEngine::nixlNoThreadProgressEngine(struct doca_nvme_kernel_kvdev *nvme_kvdev,
                                                        uint32_t num_tasks,
                                                        uint32_t max_value_len)
@@ -676,7 +676,6 @@ nixlNoThreadProgressEngine::nixlNoThreadProgressEngine(struct doca_nvme_kernel_k
     if (initErr_) {
         return;
     }
-
     NIXL_DEBUG << "Created no-thread progress engine";
 }
 
@@ -718,14 +717,14 @@ nixlNoThreadProgressEngine::~nixlNoThreadProgressEngine() {
 nixl_status_t
 
 // ▶▶ 무스레드형이 override 하는 지점. 상태를 묻기 전에
-//    ① 폴링하고 ② 밀린 요청을 재시도한다.
+//    ① 폴링하고 ② 밀린 요청을 재시도한다.(이 요청을 check하기 전에, 다른 걸 먼저 하는 것.)
 nixlNoThreadProgressEngine::checkXfer(nixlDocaMemosBackendReqH *req_h) const {
     if (!req_h) {
         return NIXL_ERR_INVALID_PARAM;
     }
 
-    progress();
-    tryResumePendingRequests();
+    progress(); // 완료된 것 몰아서 거두기
+    tryResumePendingRequests(); // 대기 중인 descriptor들 넣기
     return nixlDocaMemosProgressEngine::checkXfer(req_h);
 }
 
